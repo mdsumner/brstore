@@ -215,7 +215,7 @@ def to_parquet(rows, schema):
     buf = io.BytesIO()
     # fixed writer settings so equal rows give equal bytes, hence equal names
     pq.write_table(
-        pa.Table.from_pylist(rows, schema=schema),
+        rows if isinstance(rows, pa.Table) else pa.Table.from_pylist(rows, schema=schema),
         buf,
         compression="zstd",
         write_statistics=True,
@@ -768,6 +768,30 @@ def init(store, table, rows_by_array, sources, part_size=1, writer="import", mes
         refs=refs,
         sources=s.put_list([dict(path=s.put_frag(sorted(sources, key=lambda r: r["source"]), SOURCES_SCHEMA), rows=len(sources))]),
         changes=s.put_frag(changes, CHANGES_SCHEMA),
+    )
+    if not s.o.put_new("versions/00000001.json", json.dumps(man, separators=(",", ":")).encode()):
+        raise Conflict("store already has a version 1")
+    return 1
+
+
+def init_fragments(store, table, refs, sources, writer="import", message="import"):
+    """Version 1 from fragments already stored: refs maps an array to its
+    fragment entries [{lo, hi, path, rows}]. For a bulk load too large to
+    pass through init as rows. No change keys are recorded: nothing can have
+    started before version 1, so nothing can conflict with it."""
+    s = store
+    man = dict(
+        format=FORMAT,
+        version=1,
+        parent=0,
+        writer=writer,
+        message=message,
+        created=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        meta_changed=sorted(a["array"] for a in table["arrays"]),
+        table=s.put_table(table),
+        refs={a: s.put_list(sorted(f, key=lambda f: f["lo"])) for a, f in refs.items()},
+        sources=s.put_list([dict(path=s.put_frag(sorted(sources, key=lambda r: r["source"]), SOURCES_SCHEMA), rows=len(sources))]),
+        changes=None,
     )
     if not s.o.put_new("versions/00000001.json", json.dumps(man, separators=(",", ":")).encode()):
         raise Conflict("store already has a version 1")
