@@ -313,8 +313,10 @@ fragments (3.4 KB), a pack (1.4 KB), a description and a manifest.
 Readers: a checkout renders the coordinate back inline, so the
 three-file export is unchanged and `wxy-refs` reads it as before. The
 kerchunk render leaves it referenced, and zarr-python reads its values
-from the pack like any array (`zarr_check.py`). GDAL has not been run
-on this form.
+from the pack like any array (`zarr_check.py`). GDAL 3.13.3 does the
+same: on Setonix (run by Michael, 2026-11-23 20:22 UTC, store on Acacia)
+`pawsey/gdal_check.py` read `time` as written under all three tags, and
+every data window identically.
 
 ### A Zarr write interface
 
@@ -357,9 +359,6 @@ writes larger than memory (a session holds its chunks until commit).
   but pixels were checked against GDAL only on the 27-reference fixture.
   The cost comparison with Icechunk and delta-rs still uses synthetic
   rows.
-- **GDAL on a referenced coordinate.** Read here by zarr-python and, through
-  the checkout, by `wxy-refs`; the GDAL read in `pawsey/gdal_check.py` has not
-  been rerun since coordinates changed.
 - **Held bytes at scale.** No pack larger than a few kilobytes was
   written; pack sizing and compaction are untested.
 - **Concurrent writers at scale,** and Icechunk or Delta on the OISST
