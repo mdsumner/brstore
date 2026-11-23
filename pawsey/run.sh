@@ -13,6 +13,10 @@
 #                                            # arrays.json and refs_<array>.parquet,
 #                                            # e.g. a published <dataset>/flat
 #
+#   BR_NATIVE=1    no container: use the Python on PATH (BR_PYTHON, default
+#                  python3) with pyarrow, duckdb, numcodecs, numpy and h5py.
+#                  Enough for "real" and "pixels" on any machine; the full
+#                  run also wants obstore, netCDF4 and GDAL 3.11 or later.
 #   BR_S3_ROOT     default s3://aad-derived/raad-scratch/brstore-test
 #                  (each run writes under <root>/<run id>/, a few hundred KB)
 #   RCLONE_REMOTE  default pawsey1197: keys and endpoint are read from its
@@ -25,7 +29,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE=${RCLONE_REMOTE:-pawsey1197}
-if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+if [ "${1:-all}" = all ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then  # only the full run writes to Acacia
   cfg=$(rclone config show "$REMOTE")
   get() { printf '%s\n' "$cfg" | awk -F' *= *' -v k="$1" '$1==k{print $2; exit}'; }
   AWS_ACCESS_KEY_ID=$(get access_key_id); AWS_SECRET_ACCESS_KEY=$(get secret_access_key)
@@ -44,19 +48,33 @@ if [ "$BR_MODE" = pixels ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
 export BR_PIXEL_ARGS
 mkdir -p "$BR_WORK"
 [ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
-command -v singularity > /dev/null || module load pawseyenv/2025.08 "${SINGULARITY_MODULE:-singularity/4.1.0-slurm}"
-SIF=${SIF:-$MYSOFTWARE/sif_lib/gdal-r-python-extras_latest.sif}
-PYSITE=${RV_PYUSER:-$MYSOFTWARE/rv-pyuser}/site
-export PYTHONPATH=$PYSITE${PYTHONPATH:+:$PYTHONPATH}
 export TMPDIR=$BR_WORK/tmp; mkdir -p "$TMPDIR"
-BIND="-B $MYSOFTWARE -B $BR_WORK -B $HERE"
-case $BR_EXPORT in ""|http://*|https://*) ;; *) BR_EXPORT=$(cd "$BR_EXPORT" && pwd); BIND="$BIND -B $BR_EXPORT" ;; esac
+case $BR_EXPORT in ""|http://*|https://*) ;; *) BR_EXPORT=$(cd "$BR_EXPORT" && pwd) ;; esac
+export BR_NATIVE=${BR_NATIVE:-} BR_PYTHON=${BR_PYTHON:-python3} PYSITE=
+if [ -n "$BR_NATIVE" ]; then
+  RUNNER=  # no container: the Python on PATH, with whatever modules are loaded
+else
+  command -v singularity > /dev/null || module load pawseyenv/2025.08 "${SINGULARITY_MODULE:-singularity/4.1.0-slurm}"
+  SIF=${SIF:-$MYSOFTWARE/sif_lib/gdal-r-python-extras_latest.sif}
+  PYSITE=${RV_PYUSER:-$MYSOFTWARE/rv-pyuser}/site
+  export PYTHONPATH=$PYSITE${PYTHONPATH:+:$PYTHONPATH}
+  BIND="-B $MYSOFTWARE -B $BR_WORK -B $HERE"
+  case $BR_EXPORT in ""|http://*|https://*) ;; *) BIND="$BIND -B $BR_EXPORT" ;; esac
+  RUNNER="singularity exec $BIND $SIF"
+fi
+export PYSITE
 # shellcheck disable=SC2086
-exec singularity exec $BIND "$SIF" bash -c '
+exec $RUNNER bash -c '
   set -uo pipefail
-  for p in obstore duckdb numcodecs; do
-    python -c "import $p" 2>/dev/null || python -m pip install -q --target "'"$PYSITE"'" --no-deps $p
-  done
+  if [ -n "$BR_NATIVE" ]; then
+    python() { "$BR_PYTHON" "$@"; }
+    miss=; for p in pyarrow duckdb numcodecs numpy h5py; do python -c "import $p" 2>/dev/null || miss="$miss $p"; done
+    [ -z "$miss" ] || { echo "run.sh: this Python lacks:$miss (pip install them into a venv, then rerun)"; exit 1; }
+  else
+    for p in obstore duckdb numcodecs; do
+      python -c "import $p" 2>/dev/null || python -m pip install -q --target "$PYSITE" --no-deps $p
+    done
+  fi
   cd "'"$HERE"'"; F=$BR_WORK/fixtures/mdimrefs; fail=0
   step() { echo; echo "######## $1"; shift; "$@" || { echo "######## FAILED: $1 (exit $?)"; fail=1; }; }
   if [ "$BR_MODE" = real ]; then
