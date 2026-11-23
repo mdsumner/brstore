@@ -285,6 +285,37 @@ kerchunk render leaves it referenced, and zarr-python reads its values
 from the pack like any array (`zarr_check.py`). GDAL has not been run
 on this form.
 
+### A Zarr write interface
+
+`brzarr.py` (about 300 lines) is a zarr-python 3 store, in Zarr format 2,
+over one brstore version. Reads come from the version the session opened
+on. Writes are held in memory; `commit()` puts the chunk bytes in one
+pack and makes one version. So one `xarray.Dataset.to_zarr()` call, with
+its metadata, coordinates and every chunk, is one atomic commit, and
+`to_zarr` itself is unchanged.
+
+`zarr_write_check.py` asserts, with xarray 2026.9 and zarr-python 3.4:
+
+| Step | Result |
+|---|---|
+| `to_zarr` into an empty store | nothing stored before `commit()`; then one pack, version 1; reads back equal |
+| `to_zarr(append_dim="time")` | one commit; version 2 has 5 days, version 1 still has 3 |
+| two sessions write different days with `region=` | the second rebases over the first |
+| two sessions write the same day | the second is refused |
+| zarr-python over the kerchunk render | identical |
+| unmodified `wxy-refs` on the three-file checkout | 3 of 3 windows identical |
+| a derived variable written beside references to netCDF files | one table; the new array in a pack, `sst` still mostly references |
+
+Each chunk xarray wrote is an ordinary reference row
+(`packs/<sha>.pack`, offset, size, `COMPRESSION=DEFLATE; FILTER=SHUFFLE;
+ENDIANNESS=LITTLE`), so nothing downstream can tell a written chunk from
+a scanned one. The Zarr group's attributes are kept as `attrs` in the
+table header, which `wxy-refs` ignores.
+
+Not handled yet: Zarr format 3 (the array description holds a V2 codec
+object), nested groups, zero-dimensional arrays, deleting an array, and
+writes larger than memory (a session holds its chunks until commit).
+
 ## What this does not show
 
 - **Object storage beyond Acacia.** The conditional PUT is shown on
@@ -301,8 +332,10 @@ on this form.
   written; pack sizing and compaction are untested.
 - **Concurrent writers at scale,** and Icechunk or Delta on the OISST
   shape.
-- **Not attempted at all:** branches, credentials per prefix, a Zarr
-  write interface (zarr-python or zarrs `set` into a pack), a grace
+- **The Zarr write interface beyond the small case.** Format 2 only,
+  one flat group, chunks held in memory until commit; not run on object
+  storage, with dask, or from zarrs.
+- **Not attempted at all:** branches, credentials per prefix, a grace
   period in GC.
 
 ## Open questions

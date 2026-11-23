@@ -42,19 +42,32 @@ Nothing is ever overwritten.
 | `scale.py` | the wxylib/design m16 history at its row counts (synthetic rows) through brstore, Icechunk and delta-rs |
 | `wxy_check.py` | oracle manifests for wxylib/core's `refs_windows` example |
 | `zarr_check.py` | zarr-python over fsspec reads the committed versions |
+| `brzarr.py` | a zarr-python store over one version: `xarray.to_zarr` becomes one atomic commit |
+| `zarr_write_check.py` | xarray writes, appends and races through `brzarr.py`; other readers read the result |
 | `pawsey/run.sh` | one command for Setonix: the object-storage probe on Acacia, the walk with the store on Acacia, a GDAL read |
 | `results/` | raw numbers behind the tables in the design record |
 
 ## Run
 
 Python 3 with pyarrow, duckdb, numcodecs, numpy, netCDF4 and h5py (plus
-fsspec and zarr for `zarr_check.py`, obstore for S3):
+fsspec and zarr for `zarr_check.py`, xarray for `zarr_write_check.py`,
+obstore for S3):
 
 ```sh
 git clone --depth 1 https://github.com/wxylib/fixtures ../fixtures
 python demo.py ../fixtures/mdimrefs work
 python wxy_check.py ../fixtures/mdimrefs work && python zarr_check.py work
 python real_rows.py ../fixtures/mdimrefs/bran2023-temp-201001 work-bran
+python zarr_write_check.py work-zw work
+```
+
+Writing with xarray:
+
+```python
+import brstore, brzarr
+z = brzarr.Session(brstore.Store("my-store"), writer="me")
+ds.to_zarr(z, zarr_format=2)           # held in memory
+version = z.commit("first write")      # one pack, one new version
 ```
 
 With the store on S3-compatible storage (credentials from `AWS_*`,
@@ -71,11 +84,12 @@ Shown: the walk passes on a local disk, on a moto server and on Pawsey's
 Acacia; committed versions read identically through GDAL 3.13.3,
 unmodified wxylib/core `wxy-refs`, zarr-python and DuckDB; a published
 OISST flat store (65,928 rows) replays to a version equal to it row for
-row; history costs about what Icechunk (manifests split per day) and
+row; `xarray.to_zarr` (write, append, region) lands as one atomic commit
+each; history costs about what Icechunk (manifests split per day) and
 delta-rs cost.
 
 Not shown: a many-chunks real store, writers on separate machines, any
-service but Acacia, a Zarr write interface, branches. The design record lists these in full.
+service but Acacia, Zarr format 3 writes, branches. The design record lists these in full.
 
 ## Licence
 

@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pyarrow duckdb numcodecs numpy netCDF4 h5py fsspec zarr obstore boto3 "moto[server]"
+      - run: pip install pyarrow duckdb numcodecs numpy netCDF4 h5py fsspec zarr xarray obstore boto3 "moto[server]"
       - run: git clone --depth 1 https://github.com/wxylib/fixtures ../fixtures
       - name: The walk on a local store, every result an assert
         run: python demo.py ../fixtures/mdimrefs work
@@ -19,6 +19,8 @@ jobs:
         run: |
           python wxy_check.py ../fixtures/mdimrefs work
           python zarr_check.py work
+      - name: xarray writes through brzarr, and other readers read the result
+        run: python zarr_write_check.py work-zw work
       - name: Real fixture tables replayed as histories, compared row for row
         run: |
           python real_rows.py ../fixtures/mdimrefs/oisst-198109 work-oisst
