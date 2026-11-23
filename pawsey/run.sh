@@ -68,8 +68,12 @@ exec $RUNNER bash -c '
   set -uo pipefail
   if [ -n "$BR_NATIVE" ]; then
     python() { "$BR_PYTHON" "$@"; }
-    miss=; for p in pyarrow duckdb numcodecs numpy h5py; do python -c "import $p" 2>/dev/null || miss="$miss $p"; done
-    [ -z "$miss" ] || { echo "run.sh: this Python lacks:$miss (pip install them into a venv, then rerun)"; exit 1; }
+    python -c "import sys; sys.exit(sys.version_info < (3, 9))" || {
+      echo "run.sh: $BR_PYTHON is $(python --version 2>&1); Python 3.9 or later is needed (set BR_PYTHON)"; exit 1; }
+    miss=; for p in pyarrow duckdb numcodecs numpy h5py; do
+      timeout 120 "$BR_PYTHON" -c "import $p" 2>/dev/null || miss="$miss $p"
+    done
+    [ -z "$miss" ] || { echo "run.sh: this Python lacks, or cannot import within 2 minutes:$miss (pip install them into a venv, then rerun)"; exit 1; }
   else
     for p in obstore duckdb numcodecs; do
       python -c "import $p" 2>/dev/null || python -m pip install -q --target "$PYSITE" --no-deps $p
