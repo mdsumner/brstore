@@ -82,13 +82,13 @@ BRSTORE_ROOT=s3://bucket/prefix/walk python demo.py ../fixtures/mdimrefs work
 
 Shown: the walk passes on a local disk, on a moto server and on Pawsey's
 Acacia; committed versions read identically through GDAL 3.13.3,
-unmodified wxylib/core `wxy-refs`, zarr-python and DuckDB; a published
-OISST flat store (65,928 rows) replays to a version equal to it row for
-row; `xarray.to_zarr` (write, append, region) lands as one atomic commit
+unmodified wxylib/core `wxy-refs`, zarr-python and DuckDB; three
+published flat stores (OISST, ESA CCI chlorophyll, and GHRSST MUR at
+30.7 million rows) replay to versions equal to them row for row; `xarray.to_zarr` (write, append, region) lands as one atomic commit
 each; history costs about what Icechunk (manifests split per day) and
 delta-rs cost.
 
-Not shown: a many-chunks real store, writers on separate machines, any
+Not shown: pixels read from the real stores, writers on separate machines, any
 service but Acacia, Zarr format 3 writes, branches. The design record lists these in full.
 
 ## Licence

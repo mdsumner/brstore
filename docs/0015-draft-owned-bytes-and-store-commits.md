@@ -257,6 +257,37 @@ That fix was partial: a real daily append changes `time` every day, so
 its description, values included, was still rewritten whole on each
 commit.
 
+### Real stores with many chunks per file (run by Michael on Setonix, about 20:30 UTC)
+
+Two more published flat stores, each six arrays (a variable and five
+overview levels), replayed by `run.sh real` on a login node. Raw output
+in `results/real-stores-2026-11-23.json`.
+
+| | ESA CCI monthly chlorophyll | GHRSST MUR `analysed_sst` |
+|---|---|---|
+| rows | 77,478 | 30,661,488 |
+| steps of `dim_0` | 349 | 8,934 |
+| flat export, refs Parquet | 1.03 MB | 273.2 MB |
+| version 1 | half, 1.1 s | all but 60 days, 155 fragments, 63.9 s |
+| commits | 59 of 3 steps | 60 of 1 day, 3,432 rows each |
+| commit, median (slowest) | 0.06 s | 0.08 s (0.12 s) |
+| whole history | 4.3 MB | 241.3 MB |
+| of which fragment lists | 1.37 MB | 1.45 MB |
+| root manifest | 1.0 KB | 1.0 KB |
+| peak memory | not recorded | 2.5 GB |
+| latest equals the export | yes, both `EXCEPT`s empty | yes, by row count and a sum of row hashes per array |
+
+The GHRSST history, 60 daily commits included, is smaller than the flat
+export it came from, because the fragments (zstd, about 200,000 rows
+each) compress better than the published files. A day's commit costs
+about the same whether the store holds 77 thousand rows or 30 million.
+The fragment lists cost about 4 KB per array per commit either way: a
+third of the small store's history, under 1 percent of the large one's.
+
+Limits of this run: the replay appends reference rows only (the array
+descriptions, coordinates included, are the export's from version 1);
+the large comparison is a hash sum, not `EXCEPT`; no pixels were read.
+
 ### Coordinates as referenced arrays
 
 "A write is a harvest" applies to coordinates too. `put_coord` holds a
@@ -323,10 +354,11 @@ writes larger than memory (a session holds its chunks until commit).
 - **Object storage beyond Acacia.** The conditional PUT is shown on
   Acacia (Ceph) only, with 16 writers in one process. AWS S3, source.coop's
   proxy, and writers on separate machines are untested.
-- **Real rows beyond OISST.** The cost tables use synthetic rows; the
-  one real store replayed has one chunk per source. A many-chunks store
-  (GHRSST, BRAN) has not been replayed. Pixels were checked against GDAL
-  only on the 27-reference fixture.
+- **Pixels from the real stores.** Three published stores replay row
+  for row (OISST, ESA CCI chlorophyll, GHRSST MUR at 30.7 million rows),
+  but pixels were checked against GDAL only on the 27-reference fixture.
+  The cost comparison with Icechunk and delta-rs still uses synthetic
+  rows.
 - **Held bytes at scale.** No pack larger than a few kilobytes was
   written; pack sizing and compaction are untested.
 - **Concurrent writers at scale,** and Icechunk or Delta on the OISST
