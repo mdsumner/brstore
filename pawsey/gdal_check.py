@@ -39,6 +39,11 @@ for tag, man in (("held", "held-sst"), ("level-a", "level-a-sst_x2"), ("latest",
     ds = gdal.OpenEx('ZARR:"/vsikerchunk_json_ref/{%s}"' % ref, gdal.OF_MULTIDIM_RASTER)
     arr = ds.GetRootGroup().OpenMDArray(want["array"])
     print(f"{tag}: {n} keys; {want['array']} shape {[d.GetSize() for d in arr.GetDimensions()]}")
+    # the time coordinate is a referenced array in a pack: GDAL must read its values too
+    t = ds.GetRootGroup().OpenMDArray("time").ReadAsArray()
+    ok = [float(x) for x in t] == [1339.0 + i for i in range(arr.GetDimensions()[0].GetSize())]
+    bad += not ok
+    print(f"   time coordinate {[float(x) for x in t]}: {'as written' if ok else 'DIFFERENT'}")
     for name, w in want["oracle"].items():
         got = arr.ReadAsArray(array_start_idx=w["start"], count=w["count"])
         h = hashlib.sha256(np.ascontiguousarray(got.astype("<i2")).tobytes()).hexdigest()
