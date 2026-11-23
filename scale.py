@@ -319,6 +319,44 @@ def oisst(label, bulk_part, compact_every, fanout=None):
     print("oisst", label, json.dumps(r))
 
 
+def coord_cost():
+    """A 16,000-value time coordinate extended by one value in each of 387
+    commits: held inline in its description, or as a referenced array."""
+    for how in ("inline", "referenced"):
+        root = os.path.join(WORK, "coord-" + how)
+        shutil.rmtree(root, ignore_errors=True)
+        s = Store(root)
+        vals = [float(i) for i in range(16000)]
+        desc = dict(array="time", kind="coord", storage="inline", dims=["time"], shape=[16000], chunks=[16000], dtype="<f8",
+                    fill=None, codec=None, attrs={"units": "days since 1978-01-01"}, affine=None, values=vals)
+        brstore.init(s, dict(format_version="byterefs/0.1", remap=[], arrays=[desc]), {}, [])
+        if how == "referenced":
+            t = s.begin("w")
+            t.put_coord("time", vals, attrs=desc["attrs"])
+            t.commit("to referenced")
+        before = sum(b for _, b in classes(s).values())
+        times = []
+        for d in range(16000, 16387):
+            t0 = time.perf_counter()
+            t = s.begin("daily")
+            if how == "inline":
+                desc = dict(desc, shape=[d + 1], chunks=[d + 1], values=desc["values"] + [float(d)])
+                t.put_array(desc)
+            else:
+                t.append_coord("time", [float(d)])
+            t.commit(f"day {d}")
+            times.append(time.perf_counter() - t0)
+        got = s.coord_values(s.manifest(s.latest()), "time")
+        assert len(got) == 16387 and got[-1] == 16386.0 and got[0] == 0.0
+        c = classes(s)
+        r = dict(appends=387, added_kb_per_append=round((sum(b for _, b in c.values()) - before) / 387 / 1e3, 2),
+                 commit_s_median=round(statistics.median(times), 4), by_class=c)
+        OUT["coord_" + how] = r
+        print("coord", how, json.dumps(r))
+
+
+if "coord" in WHAT:
+    coord_cost()
 if "mur" in WHAT:
     OUT["mur_flat_export_mb"] = mb(flat_export_size(range(366)))
     print("flat export of the year, one Parquet file:", OUT["mur_flat_export_mb"], "MB")

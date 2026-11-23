@@ -253,11 +253,37 @@ its own content-addressed object under `meta/`, and the manifest names
 them, so a commit restates only the descriptions that changed (the BRAN
 replay's manifests fell to 0.5 KB).
 
-That fix is partial. A real daily append changes `time` every day, so
-its description, values included, is still rewritten whole on each
-commit: about 95 KB a day for OISST. The proper cure is to stop holding
-a growing coordinate inline and make it a referenced array whose chunks
-go into packs like any other write. Not done.
+That fix was partial: a real daily append changes `time` every day, so
+its description, values included, was still rewritten whole on each
+commit.
+
+### Coordinates as referenced arrays
+
+"A write is a harvest" applies to coordinates too. `put_coord` holds a
+coordinate as a chunked referenced array (128 values a chunk, raw
+little-endian, each chunk padded to full length) whose chunks go into a
+pack; its description then carries no values. `append_coord` rewrites
+only the last, partly filled chunk. In byterefs terms the array has
+`kind = coord` and `storage = referenced`, which the 0.1 text does not
+forbid but no producer writes today.
+
+Measured (`scale.py coord`): a 16,000-value time coordinate extended by
+one value in each of 387 commits.
+
+| How `time` is held | Added per append |
+|---|---|
+| Inline in its description | 119.1 KB |
+| Referenced array | 9.2 KB |
+
+The 9.2 KB is no longer the coordinate. It is the fixed cost of a
+commit's small objects: one list leaf (3.8 KB), three small Parquet
+fragments (3.4 KB), a pack (1.4 KB), a description and a manifest.
+
+Readers: a checkout renders the coordinate back inline, so the
+three-file export is unchanged and `wxy-refs` reads it as before. The
+kerchunk render leaves it referenced, and zarr-python reads its values
+from the pack like any array (`zarr_check.py`). GDAL has not been run
+on this form.
 
 ## What this does not show
 
@@ -268,7 +294,9 @@ go into packs like any other write. Not done.
   one real store replayed has one chunk per source. A many-chunks store
   (GHRSST, BRAN) has not been replayed. Pixels were checked against GDAL
   only on the 27-reference fixture.
-- **Growing inline coordinates** (above).
+- **GDAL on a referenced coordinate.** Read here by zarr-python and, through
+  the checkout, by `wxy-refs`; the GDAL read in `pawsey/gdal_check.py` has not
+  been rerun since coordinates changed.
 - **Held bytes at scale.** No pack larger than a few kilobytes was
   written; pack sizing and compaction are untested.
 - **Concurrent writers at scale,** and Icechunk or Delta on the OISST
