@@ -110,6 +110,83 @@
    "frags": 285.86
   },
   "latest_manifest_kb": 0.5,
-  "peak_memory_mb": 2529
+  "peak_memory_mb": 2529,
+  "pixels": {
+   "run": "bash pawsey/run.sh pixels, Setonix, 2026-11-23 21:05 UTC",
+   "version": 61,
+   "fragments": 248,
+   "reader": "GDAL 3.13.3 over /vsicurl/",
+   "remap_target": "public",
+   "chunks": [
+    [
+     [
+      55,
+      14,
+      4,
+      0
+     ],
+     "ocean_salt_1993_02.nc",
+     3970688102,
+     28718
+    ],
+    [
+     [
+      41,
+      20,
+      2,
+      7
+     ],
+     "ocean_salt_1993_02.nc",
+     1710600226,
+     92775
+    ],
+    [
+     [
+      8080,
+      0,
+      2,
+      3
+     ],
+     "ocean_salt_2015_02.nc",
+     2119015664,
+     84437
+    ],
+    [
+     [
+      8077,
+      27,
+      1,
+      8
+     ],
+     "ocean_salt_2015_02.nc",
+     1764542570,
+     91864
+    ],
+    [
+     [
+      12264,
+      0,
+      4,
+      2
+     ],
+     "ocean_salt_2026_07.nc",
+     4571368779,
+     986
+    ],
+    [
+     [
+      12264,
+      3,
+      4,
+      2
+     ],
+     "ocean_salt_2026_07.nc",
+     4583000624,
+     949
+    ]
+   ],
+   "identical": 6,
+   "byte_range_as_reader_reports": 6
+  }
  }
 }

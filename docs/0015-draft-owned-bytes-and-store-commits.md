@@ -290,7 +290,17 @@ third of the small store's history, under 1 percent of the large one's.
 
 Limits of this run: the replay appends reference rows only (the array
 descriptions, coordinates included, are the export's from version 1);
-the large comparison is a hash sum, not `EXCEPT`; no pixels were read.
+the large comparison is a hash sum, not `EXCEPT`.
+
+Pixels, on the Bluelink store (`run.sh pixels`, 21:05 UTC): six chunks
+taken from the first, a middle and the last fragment of version 61 were
+fetched by byte range from NCI's THREDDS server through the table's
+`public` remap, decoded, and compared with the same blocks read from the
+netCDF files by GDAL 3.13.3 over `/vsicurl/`. All six are identical, and
+for each GDAL's `GetRawBlockInfo` reports the offset and size the row
+holds (offsets up to 4.58 GB into a file). Two of the six are from the
+last day, which an append commit wrote. Six chunks of 37.5 million show
+the path end to end, not every row.
 
 ### Coordinates as referenced arrays
 
@@ -358,12 +368,12 @@ writes larger than memory (a session holds its chunks until commit).
 - **Object storage beyond Acacia.** The conditional PUT is shown on
   Acacia (Ceph) only, with 16 writers in one process. AWS S3, source.coop's
   proxy, and writers on separate machines are untested.
-- **Pixels from the real stores.** Four published stores replay row
-  for row (OISST, ESA CCI chlorophyll, GHRSST MUR at 30.7 million rows,
-  Bluelink salinity at 37.5 million),
-  but pixels were checked against GDAL only on the 27-reference fixture.
-  The cost comparison with Icechunk and delta-rs still uses synthetic
-  rows.
+- **Pixels beyond a sample.** Four published stores replay row for row
+  (OISST, ESA CCI chlorophyll, GHRSST MUR at 30.7 million rows, Bluelink
+  salinity at 37.5 million), but pixels were compared with GDAL on six
+  chunks of one of them and on the 27-reference fixture. No TIFF source
+  (the GHRSST store) has had pixels read. The cost comparison with
+  Icechunk and delta-rs still uses synthetic rows.
 - **Held bytes at scale.** No pack larger than a few kilobytes was
   written; pack sizing and compaction are untested.
 - **Concurrent writers at scale,** and Icechunk or Delta on the OISST
