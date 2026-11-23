@@ -4,6 +4,10 @@
 # raad.virtualize hpc/pawsey/singularity-run.sh. From a Setonix login node:
 #
 #   bash pawsey/run.sh                 # probe, demo on Acacia, GDAL read
+#   bash pawsey/run.sh zarr            # only: xarray writes through brzarr with
+#                                            # the store on Acacia (wants xarray,
+#                                            # zarr 3, fsspec and obstore: use
+#                                            # BR_NATIVE=1 with a venv that has them)
 #   bash pawsey/run.sh pixels [args]   # only: after "real", read chunks through
 #                                            # that store and compare with the
 #                                            # source files (args go to pixels.py)
@@ -29,7 +33,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE=${RCLONE_REMOTE:-pawsey1197}
-if [ "${1:-all}" = all ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then  # only the full run writes to Acacia
+if { [ "${1:-all}" = all ] || [ "${1:-}" = zarr ]; } && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then  # these write to Acacia
   cfg=$(rclone config show "$REMOTE")
   get() { printf '%s\n' "$cfg" | awk -F' *= *' -v k="$1" '$1==k{print $2; exit}'; }
   AWS_ACCESS_KEY_ID=$(get access_key_id); AWS_SECRET_ACCESS_KEY=$(get secret_access_key)
@@ -70,7 +74,8 @@ exec $RUNNER bash -c '
     python() { "$BR_PYTHON" "$@"; }
     python -c "import sys; sys.exit(sys.version_info < (3, 9))" || {
       echo "run.sh: $BR_PYTHON is $(python --version 2>&1); Python 3.9 or later is needed (set BR_PYTHON)"; exit 1; }
-    miss=; for p in pyarrow duckdb numcodecs numpy h5py; do
+    need="pyarrow duckdb numcodecs numpy h5py"; [ "$BR_MODE" = zarr ] && need="$need xarray zarr fsspec obstore"
+    miss=; for p in $need; do
       timeout 120 "$BR_PYTHON" -c "import $p" 2>/dev/null || miss="$miss $p"
     done
     [ -z "$miss" ] || { echo "run.sh: this Python lacks, or cannot import within 2 minutes:$miss (pip install them into a venv, then rerun)"; exit 1; }
@@ -83,6 +88,11 @@ exec $RUNNER bash -c '
   step() { echo; echo "######## $1"; shift; "$@" || { echo "######## FAILED: $1 (exit $?)"; fail=1; }; }
   if [ "$BR_MODE" = real ]; then
     step "a real flat refs store replayed as a history" python real_rows.py "$BR_EXPORT" "$BR_WORK/real"
+    [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
+  fi
+  if [ "$BR_MODE" = zarr ]; then
+    step "xarray writes, appends and races through brzarr, store on Acacia ($BR_S3)" env BRSTORE_ROOT="$BR_S3/zarr" python zarr_write_check.py "$BR_WORK/zarr"
+    echo; echo "store written to $BR_S3 (remove with: rclone purge '"$REMOTE"':${BR_S3#s3://})"
     [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
   fi
   if [ "$BR_MODE" = pixels ]; then
