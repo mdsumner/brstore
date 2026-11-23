@@ -72,6 +72,7 @@ nrows = {n: pq.ParquetFile(src[n]).metadata.num_rows for n in names}
 total = sum(nrows.values())
 flat = sum(os.path.getsize(p) for p in src.values())
 con = duckdb.connect()
+con.execute("SET threads = 4")  # a login node offers hundreds of cores; this job needs few, and each costs memory
 con.execute(f"SET temp_directory='{os.path.join(os.path.abspath(A.work), 'duckdb-tmp')}'")
 steps = [r[0] for r in con.execute("SELECT DISTINCT dim_0 FROM read_parquet(?) ORDER BY 1", [list(src.values())]).fetchall()]
 large = total > SMALL or A.tail is not None
