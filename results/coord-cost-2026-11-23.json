@@ -1,0 +1,64 @@
+{
+ "coord_inline": {
+  "appends": 387,
+  "added_kb_per_append": 119.14,
+  "commit_s_median": 0.0093,
+  "by_class": {
+   "versions": [
+    388,
+    137984
+   ],
+   "meta": [
+    776,
+    46087416
+   ],
+   "lists": [
+    1,
+    100
+   ],
+   "frags": [
+    2,
+    650
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  }
+ },
+ "coord_referenced": {
+  "appends": 387,
+  "added_kb_per_append": 9.17,
+  "commit_s_median": 0.0099,
+  "by_class": {
+   "versions": [
+    389,
+    200420
+   ],
+   "meta": [
+    778,
+    264286
+   ],
+   "lists": [
+    1102,
+    1489168
+   ],
+   "frags": [
+    783,
+    1322376
+   ],
+   "packs": [
+    388,
+    524288
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  }
+ }
+}

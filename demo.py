@@ -127,11 +127,19 @@ s.tag("scan", 1)
 check_oracle(s, "scan", "tag scan")
 print("   objects:", store_size(s))
 
+say("1b. hold the time coordinate as a referenced array, so appends do not restate it")
+t = s.begin("import")
+tm0 = s.array(s.manifest(1), "time")
+t.put_coord("time", tm0["values"], attrs=tm0["attrs"])
+vt = t.commit("time: inline values to a referenced array")
+assert list(s.coord_values(s.manifest(vt), "time")) == tm0["values"]
+print(f"   version {vt}: time is {s.array(s.manifest(vt), 'time')['storage']}, values unchanged")
+
 # ------------------------------------------------- 2. a write is a harvest
 
 say("2. write a derived overview level; its chunks go to a pack, its rows are ordinary refs")
-m1 = s.manifest(1)
-sst = read(s, 1, "sst")
+m1 = s.manifest(s.latest())
+sst = read(s, s.latest(), "sst")
 t = s.begin("producer")
 t.put_array(level_desc(s.array(m1, "sst"), 3))
 t.put_array(coord("lat_x2", 18, -85.0, 10.0, "degrees_north"))
@@ -234,9 +242,7 @@ with h5py.File(p4, "r") as h:  # the harvest: where is each chunk
         d["shape"][0] = 4
         t.put_array(d)
 t.put_source(src4, os.path.getsize(p4), int(os.path.getmtime(p4)), brstore.file_etag(p4))
-tm = json.loads(json.dumps(s.array(mb, "time")))
-tm.update(shape=[4], chunks=[4], values=tm["values"] + [tm["values"][-1] + 1])
-t.put_array(tm)
+t.append_coord("time", [s.coord_values(mb, "time")[-1] + 1])
 lv = json.loads(json.dumps(s.array(mb, "sst_x2")))
 lv["shape"][0] = 4
 t.put_array(lv)
@@ -246,6 +252,8 @@ assert np.array_equal(read(s, v5, "sst", [3, 0, 0, 0], [1, 1, 36, 72]), day4["ss
 assert np.array_equal(read(s, v5, "ice", [3, 0, 0, 0], [1, 1, 36, 72]), day4["ice"])
 assert np.array_equal(read(s, v5, "sst_x2")[3:4], average_x2(day4["sst"]))
 assert s.array(s.manifest("scan"), "sst")["shape"][0] == 3
+assert list(s.coord_values(s.manifest(v5), "time")) == [1339.0, 1340.0, 1341.0, 1342.0]
+assert list(s.coord_values(s.manifest("scan"), "time")) == [1339.0, 1340.0, 1341.0]
 check_oracle(s, v5, f"version {v5} (4 days)")
 print(f"   version {v5}: sst and ice are 4 days, the level has day 3; tag scan still says 3 days")
 

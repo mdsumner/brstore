@@ -36,6 +36,8 @@ import pyarrow.parquet as pq
 
 FORMAT = "byterefs-store/draft-4"
 PACK_INFO = "COMPRESSION=DEFLATE; FILTER=SHUFFLE; ENDIANNESS=LITTLE"
+RAW_INFO = "ENDIANNESS=LITTLE"
+COORD_CHUNK = 128  # values per chunk of a referenced coordinate: an append rewrites one chunk
 
 
 class Conflict(Exception):
@@ -406,6 +408,20 @@ class Store:
                 return r
         return None
 
+    def coord_values(self, m, name):
+        """A coordinate's values, however the version holds them."""
+        import numpy as np
+
+        a = self.array(m, name)
+        n = a["shape"][0]
+        if a["storage"] == "affine":
+            return a["affine"]["start"] + a["affine"]["step"] * np.arange(n)
+        if a["storage"] == "inline":
+            return np.asarray(a["values"], dtype=a["dtype"])
+        rows = sorted(self.refs_rows(m, name), key=lambda r: r["dim_0"])
+        buf = b"".join(self.o.get(r["path"], r["offset"], r["size"]) for r in rows if r["present"])
+        return np.frombuffer(buf, dtype=a["dtype"])[:n].copy()
+
     # -- transactions
 
     def begin(self, writer="w"):
@@ -442,6 +458,12 @@ class Store:
         t["remap"] = [r for r in t.get("remap", []) if r["target"] != remap_target]
         t["remap"] += [dict(target=remap_target, prefix=p, replacement=r) for p, r in extra_remap]
         t["remap"].append(dict(target=remap_target, prefix="packs/", replacement=self.o.url("packs") + "/"))
+        for a in t["arrays"]:
+            if a["kind"] == "coord" and a["storage"] == "referenced":
+                # readers of the export expect a coordinate's values inline
+                v = self.coord_values(m, a["array"])
+                a.update(storage="inline", values=[float(x) if "f" in a["dtype"] else int(x) for x in v],
+                         chunks=[len(v)], codec=None)
         with open(os.path.join(outdir, "arrays.json"), "w") as f:
             json.dump(t, f, indent=1)
         for a in t["arrays"]:
@@ -516,8 +538,45 @@ class Txn:
     def put_array(self, desc):
         self.arrays[desc["array"]] = desc
 
-    def write_chunk(self, array, key, encoded):
-        self.bytes[(array, tuple(key))] = bytes(encoded)
+    def write_chunk(self, array, key, encoded, info=PACK_INFO):
+        self.bytes[(array, tuple(key))] = (bytes(encoded), info)
+
+    def put_coord(self, name, values, attrs=None, dtype="<f8", chunk=COORD_CHUNK):
+        """A coordinate as a chunked referenced array: its values go into a pack
+        like any other write, raw and little-endian, each chunk padded to full
+        length. Its description then holds no values, so it stays small."""
+        import numpy as np
+
+        v = np.asarray(values, dtype=dtype)
+        self.put_array(dict(array=name, kind="coord", storage="referenced", dims=[name], shape=[len(v)], chunks=[chunk],
+                            dtype=dtype, fill=None, codec={"compressor": None, "filters": None}, attrs=attrs or {},
+                            affine=None, values=None))
+        self._coord_chunks(name, v, 0, chunk, dtype)
+
+    def append_coord(self, name, values):
+        """Extend a referenced coordinate: rewrites its last, partly filled chunk
+        and adds new ones. Nothing else of the coordinate is touched."""
+        import numpy as np
+
+        m = self.s.manifest(self.base)
+        a = json.loads(json.dumps(self.s.array(m, name)))
+        if a["kind"] != "coord" or a["storage"] != "referenced":
+            raise ValueError(f"{name} is not a referenced coordinate; use put_coord first")
+        n0, c = a["shape"][0], a["chunks"][0]
+        k = n0 // c
+        head = self.s.coord_values(m, name)[k * c :]
+        v = np.concatenate([head, np.asarray(values, dtype=a["dtype"])])
+        a["shape"] = [n0 + len(values)]
+        self.put_array(a)
+        self._coord_chunks(name, v, k, c, a["dtype"])
+
+    def _coord_chunks(self, name, v, first, chunk, dtype):
+        import numpy as np
+
+        for i in range(0, len(v), chunk):
+            part = v[i : i + chunk]
+            pad = np.full(chunk - len(part), np.nan if "f" in dtype else 0, dtype=dtype)
+            self.write_chunk(name, (first + i // chunk,), np.concatenate([part, pad]).astype(dtype).tobytes(), RAW_INFO)
 
     def put_ref(self, array, key, path, offset, size, info):
         self.rows[(array, tuple(key))] = dict(present=1, path=path, offset=offset, size=size, info=info, data=None)
@@ -542,7 +601,7 @@ class Txn:
             return
         seen, buf = {}, bytearray()
         for ak in sorted(self.bytes):
-            b = self.bytes[ak]
+            b = self.bytes[ak][0]
             h = sha256(b)
             if h not in seen:
                 seen[h] = (len(buf), len(b))
@@ -550,9 +609,9 @@ class Txn:
         data = bytes(buf)
         name = f"packs/{sha256(data)}.pack"
         self.s.o.put_new(name, data)
-        for ak, b in self.bytes.items():
+        for ak, (b, info) in self.bytes.items():
             off, size = seen[sha256(b)]
-            self.rows[ak] = dict(present=1, path=name, offset=off, size=size, info=PACK_INFO, data=None)
+            self.rows[ak] = dict(present=1, path=name, offset=off, size=size, info=info, data=None)
         self.srcs[name] = dict(source=name, size=len(data), mtime=None, etag="sha256:" + sha256(data))
         self.bytes = {}
 

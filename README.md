@@ -75,8 +75,7 @@ row; history costs about what Icechunk (manifests split per day) and
 delta-rs cost.
 
 Not shown: a many-chunks real store, writers on separate machines, any
-service but Acacia, growing coordinates as referenced arrays, a Zarr
-write interface, branches. The design record lists these in full.
+service but Acacia, a Zarr write interface, branches. The design record lists these in full.
 
 ## Licence
 

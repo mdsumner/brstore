@@ -23,7 +23,12 @@ for tag, man in (("held", "held-sst"), ("level-a", "level-a-sst_x2"), ("latest",
     brstore.render_kerchunk_json(s, s.latest() if tag == "latest" else tag, ref, url)
     want = json.load(open(os.path.join(WORK, man + ".json")))
     fs = AsyncFileSystemWrapper(fsspec.filesystem("reference", fo=ref))
-    arr = zarr.open_group(zarr.storage.FsspecStore(fs, read_only=True, path=""), mode="r", zarr_format=2)[want["array"]]
+    grp = zarr.open_group(zarr.storage.FsspecStore(fs, read_only=True, path=""), mode="r", zarr_format=2)
+    arr = grp[want["array"]]
+    time = grp["time"][:]  # a referenced coordinate: chunks in a pack, read like any array
+    ok = list(time) == [1339.0 + i for i in range(arr.shape[0])]
+    bad += not ok
+    print(f"{tag} time coordinate {[float(x) for x in time]}: {'as written' if ok else 'DIFFERENT'}")
     for name, w in want["oracle"].items():
         got = arr[tuple(slice(a, a + n) for a, n in zip(w["start"], w["count"]))]
         ok = hashlib.sha256(np.ascontiguousarray(got.astype("<i2")).tobytes()).hexdigest() == w["sha256"]
