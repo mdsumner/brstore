@@ -334,7 +334,7 @@ every data window identically.
 
 ### A Zarr write interface
 
-`brzarr.py` (about 370 lines) is a zarr-python 3 store, in Zarr format 3
+`brzarr.py` (about 450 lines) is a zarr-python 3 store, in Zarr format 3
 or 2, over one brstore version. Reads come from the version the session
 opened on. Writes are held in memory; `commit()` puts the chunk bytes in
 one pack and makes one version. So one `xarray.Dataset.to_zarr()` call,
