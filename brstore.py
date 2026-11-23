@@ -177,6 +177,20 @@ class S3Objects:
 # ---------------------------------------------------------------- tables
 
 
+def decode_v2(a, data):
+    """Undo an array's Zarr V2 codec on one chunk's bytes."""
+    codec = a.get("codec") or {}
+    if not (codec.get("compressor") or codec.get("filters")):
+        return data
+    import numcodecs
+
+    if codec.get("compressor"):
+        data = numcodecs.get_codec(codec["compressor"]).decode(data)
+    for f in reversed(codec.get("filters") or []):
+        data = numcodecs.get_codec(f).decode(data)
+    return bytes(data)
+
+
 def refs_schema(ndim):
     return pa.schema(
         [(f"dim_{i}", pa.int64()) for i in range(ndim)]
@@ -262,6 +276,9 @@ class Store:
     def manifest(self, version):
         if isinstance(version, str):
             version = json.loads(self.o.get(f"tags/{version}.json"))["version"]
+        if version == 0:  # before the first commit: an empty table
+            return dict(version=0, table=dict(format_version="mdim-refs/0.2", remap=[], arrays=[]), table_keys={},
+                        refs={}, sources=None)
         m = json.loads(self.o.get(f"versions/{version:08d}.json"))
         m["table_keys"] = self._table_keys(m["table"])
         m["table"] = self._get_table(m["table"])
@@ -419,7 +436,7 @@ class Store:
         if a["storage"] == "inline":
             return np.asarray(a["values"], dtype=a["dtype"])
         rows = sorted(self.refs_rows(m, name), key=lambda r: r["dim_0"])
-        buf = b"".join(self.o.get(r["path"], r["offset"], r["size"]) for r in rows if r["present"])
+        buf = b"".join(decode_v2(a, self.o.get(r["path"], r["offset"], r["size"])) for r in rows if r["present"])
         return np.frombuffer(buf, dtype=a["dtype"])[:n].copy()
 
     # -- transactions
@@ -534,6 +551,12 @@ class Txn:
         self.srcs = {}  # source -> row
         self.compactions = []  # (array, lo, hi): merge fragments inside that range
         self.merge_sources = False
+        self.group_attrs = None  # attributes of the whole table, when set
+
+    def put_group_attrs(self, attrs):
+        """Attributes of the table as a whole (a Zarr group's, a netCDF file's
+        global ones). The last writer wins; this conflicts with nothing."""
+        self.group_attrs = dict(attrs)
 
     def put_array(self, desc):
         self.arrays[desc["array"]] = desc
@@ -639,6 +662,8 @@ class Txn:
         for name, desc in self.arrays.items():
             table["arrays"] = [a for a in table["arrays"] if a["array"] != name] + [desc]
         table["arrays"].sort(key=lambda a: a["array"])
+        if self.group_attrs is not None:
+            table["attrs"] = self.group_attrs
         ndim = {a["array"]: len(a["shape"]) for a in table["arrays"]}
         refs = {a: list(s.frags(m, a)) for a in m["refs"]}
 
@@ -765,6 +790,16 @@ def import_export(store, export_dir, part_size=1, resolve=None, writer="import",
     return init(store, table, rows, list(srcs.values()), part_size, writer, message)
 
 
+def _fill_json(fill, dtype):
+    """A stored fill value as Zarr V2 metadata spells it."""
+    if fill is None:
+        return None
+    if dtype[1] in "fc":
+        f = float(fill)
+        return "NaN" if f != f else ("Infinity" if f == float("inf") else ("-Infinity" if f == float("-inf") else f))
+    return int(float(fill)) if dtype[1] in "iu" else fill
+
+
 def render_kerchunk_json(store, version, out_path, url_for):
     """One version as kerchunk JSON (version 1) over Zarr v2 metadata: a render,
     like any other, so GDAL (3.11 or later, /vsikerchunk_json_ref/) and
@@ -784,7 +819,7 @@ def render_kerchunk_json(store, version, out_path, url_for):
         fill = a.get("fill")
         zarray = dict(zarr_format=2, shape=a["shape"], chunks=a["chunks"], dtype=a["dtype"], order="C",
                       compressor=codec.get("compressor"), filters=codec.get("filters") or None,
-                      fill_value=None if fill is None else (float(fill) if "f" in a["dtype"] else int(float(fill))),
+                      fill_value=_fill_json(fill, a["dtype"]),
                       dimension_separator=".")
         refs[f"{name}/.zarray"] = json.dumps(zarray)
         refs[f"{name}/.zattrs"] = json.dumps(dict(a.get("attrs") or {}, _ARRAY_DIMENSIONS=a["dims"]))
