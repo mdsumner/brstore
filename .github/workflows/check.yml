@@ -1,0 +1,37 @@
+name: check
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  walk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyarrow duckdb numcodecs numpy netCDF4 h5py fsspec zarr obstore boto3 "moto[server]"
+      - run: git clone --depth 1 https://github.com/wxylib/fixtures ../fixtures
+      - name: The walk on a local store, every result an assert
+        run: python demo.py ../fixtures/mdimrefs work
+      - name: zarr-python reads the committed versions through the kerchunk render
+        run: |
+          python wxy_check.py ../fixtures/mdimrefs work
+          python zarr_check.py work
+      - name: Real fixture tables replayed as histories, compared row for row
+        run: |
+          python real_rows.py ../fixtures/mdimrefs/oisst-198109 work-oisst
+          python real_rows.py ../fixtures/mdimrefs/bran2023-temp-201001 work-bran
+      - name: The same walk on S3 (a local moto server), with the storage probe
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_ENDPOINT_URL: http://127.0.0.1:5555
+          AWS_REGION: us-east-1
+        run: |
+          moto_server -p 5555 > moto.log 2>&1 &
+          sleep 5
+          python -c "import boto3; boto3.client('s3').create_bucket(Bucket='test')"
+          python pawsey/probe.py s3://test/probe
+          BRSTORE_ROOT=s3://test/walk python demo.py ../fixtures/mdimrefs work-s3
