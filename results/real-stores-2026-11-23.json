@@ -1,0 +1,79 @@
+{
+ "run": "bash pawsey/run.sh real <flat url>, Setonix login node, by Michael, 2026-11-23 about 20:30 UTC",
+ "esacci-oc-v6.0-monthly-chlor_a": {
+  "url": "https://data.source.coop/ausantarctic/ausantarctic-scratch/oceancolour/esacci-oc-v6.0-monthly-chlor_a/flat",
+  "arrays": 6,
+  "rows": 77478,
+  "flat_refs_mb": 1.03,
+  "dim_0_steps": 349,
+  "bulk_s": 1.12,
+  "steps_per_commit": 3,
+  "commits": 59,
+  "commit_s_median": 0.0562,
+  "rows_differing_from_export": 0,
+  "compared_by": "EXCEPT both ways",
+  "history_mb": {
+   "versions": 0.06,
+   "meta": 0.01,
+   "lists": 1.37,
+   "frags": 2.87
+  },
+  "latest_manifest_kb": 1.0
+ },
+ "ghrsst-mur-cog-analysed_sst": {
+  "url": "https://data.source.coop/ausantarctic/ausantarctic-scratch/ghrsst/ghrsst-mur-cog-analysed_sst/flat",
+  "arrays": 6,
+  "rows": 30661488,
+  "flat_refs_mb": 273.23,
+  "dim_0_steps": 8934,
+  "bulk_rows": 30455568,
+  "bulk_s": 63.9,
+  "bulk_fragments": {
+   "analysed_sst": [
+    114,
+    78
+   ],
+   "analysed_sst_x2": [
+    29,
+    308
+   ],
+   "analysed_sst_x4": [
+    8,
+    1234
+   ],
+   "analysed_sst_x8": [
+    2,
+    4444
+   ],
+   "analysed_sst_x16": [
+    1,
+    13333
+   ],
+   "analysed_sst_x32": [
+    1,
+    33333
+   ]
+  },
+  "steps_per_commit": 1,
+  "commits": 60,
+  "rows_per_commit": 3432,
+  "commit_s_median": 0.0814,
+  "commit_s_max": 0.1247,
+  "compared_by": "row count and sum of row hashes per array",
+  "arrays_differing_from_export": 0,
+  "objects": {
+   "versions": 61,
+   "meta": 20,
+   "lists": 458,
+   "frags": 576
+  },
+  "history_mb": {
+   "versions": 0.06,
+   "meta": 0.01,
+   "lists": 1.45,
+   "frags": 239.78
+  },
+  "latest_manifest_kb": 1.0,
+  "peak_memory_mb": 2460
+ }
+}
