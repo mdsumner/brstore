@@ -1,0 +1,327 @@
+{
+ "mur_flat_export_mb": 6.51,
+ "mur_brstore_daily": {
+  "bulk_s": 2.04,
+  "after_bulk": {
+   "versions": [
+    1,
+    22364
+   ],
+   "frags": [
+    184,
+    5479229
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    1,
+    101
+   ]
+  },
+  "daily_commit_s_median": 0.0518,
+  "daily_commit_s_max": 0.0863,
+  "manifest_bytes_first_last": [
+   22551,
+   59338
+  ],
+  "rescan_s": 0.212,
+  "versions": 186,
+  "all_history": {
+   "versions": [
+    186,
+    7615652
+   ],
+   "frags": [
+    738,
+    11987379
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    3,
+    307
+   ]
+  },
+  "all_history_mb": 19.6,
+  "scan_latest_s": 0.085,
+  "diff_bulk_to_year_rows": 470304,
+  "diff_s": 0.269,
+  "diff_year_to_rescan_rows": 2556,
+  "rows_at_tags": [
+   465192,
+   935496,
+   935496
+  ],
+  "one_chunk_by_key_ms": 4.3,
+  "gc_s": 0.06,
+  "three_tags": {
+   "versions": [
+    3,
+    141048
+   ],
+   "frags": [
+    555,
+    10825303
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    3,
+    307
+   ]
+  },
+  "three_tags_mb": 10.97,
+  "latest_only_frag_mb": 9.92
+ },
+ "mur_brstore_monthly": {
+  "bulk_s": 1.9,
+  "after_bulk": {
+   "versions": [
+    1,
+    22364
+   ],
+   "frags": [
+    184,
+    5479229
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    1,
+    101
+   ]
+  },
+  "daily_commit_s_median": 0.0425,
+  "daily_commit_s_max": 0.5443,
+  "manifest_bytes_first_last": [
+   22551,
+   23965
+  ],
+  "rescan_s": 0.0483,
+  "versions": 186,
+  "all_history": {
+   "versions": [
+    186,
+    4721141
+   ],
+   "frags": [
+    750,
+    16614633
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    3,
+    307
+   ]
+  },
+  "all_history_mb": 21.34,
+  "scan_latest_s": 0.056,
+  "diff_bulk_to_year_rows": 470304,
+  "diff_s": 0.24,
+  "diff_year_to_rescan_rows": 2556,
+  "rows_at_tags": [
+   465192,
+   935496,
+   935496
+  ],
+  "one_chunk_by_key_ms": 6.63,
+  "gc_s": 0.04,
+  "three_tags": {
+   "versions": [
+    3,
+    70302
+   ],
+   "frags": [
+    205,
+    10294795
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    3,
+    307
+   ]
+  },
+  "three_tags_mb": 10.37,
+  "latest_only_frag_mb": 9.64
+ },
+ "mur_icechunk_split1": {
+  "bulk_s": 10.27,
+  "after_bulk_mb": 9.96,
+  "daily_commit_s_median": 0.0325,
+  "daily_commit_s_max": 0.1259,
+  "rescan_s": 0.0783,
+  "all_history_objects": 928,
+  "all_history_mb": 23.51
+ },
+ "mur_icechunk_split30": {
+  "bulk_s": 1.56,
+  "after_bulk_mb": 10.21,
+  "daily_commit_s_median": 0.0577,
+  "daily_commit_s_max": 0.1305,
+  "rescan_s": 0.1046,
+  "all_history_objects": 753,
+  "all_history_mb": 133.94
+ },
+ "mur_icechunk_split365": {
+  "bulk_s": 1.41,
+  "after_bulk_mb": 10.24,
+  "daily_commit_s_median": 0.8835,
+  "daily_commit_s_max": 1.5204,
+  "rescan_s": 1.3334,
+  "all_history_objects": 747,
+  "all_history_mb": 2155.16
+ },
+ "mur_delta": {
+  "bulk_s": 7.41,
+  "daily_commit_s_median": 0.047,
+  "rescan_s": 0.0926,
+  "versions": 366,
+  "all_history_objects": 738,
+  "all_history_mb": 15.15,
+  "log_mb": 0.89
+ },
+ "oisst_yearly-then-daily": {
+  "bulk_s": 0.99,
+  "after_bulk": {
+   "versions": [
+    1,
+    23053
+   ],
+   "frags": [
+    178,
+    1410883
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  },
+  "daily_commit_s_median": 0.0071,
+  "manifest_bytes_first_last_max": [
+   23112,
+   212650,
+   212650
+  ],
+  "all_history": {
+   "versions": [
+    388,
+    40974654
+   ],
+   "frags": [
+    2500,
+    7841295
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  },
+  "all_history_mb": 48.82,
+  "bulk_and_latest_only": {
+   "versions": [
+    2,
+    235703
+   ],
+   "frags": [
+    1878,
+    6120017
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  },
+  "bulk_and_latest_only_mb": 6.36
+ },
+ "oisst_yearly-then-monthly": {
+  "bulk_s": 0.66,
+  "after_bulk": {
+   "versions": [
+    1,
+    23053
+   ],
+   "frags": [
+    178,
+    1410883
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  },
+  "daily_commit_s_median": 0.0076,
+  "manifest_bytes_first_last_max": [
+   23112,
+   32277,
+   44784
+  ],
+  "all_history": {
+   "versions": [
+    388,
+    12587483
+   ],
+   "frags": [
+    2557,
+    9593463
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  },
+  "all_history_mb": 22.18,
+  "bulk_and_latest_only": {
+   "versions": [
+    2,
+    55330
+   ],
+   "frags": [
+    262,
+    1815979
+   ],
+   "packs": [
+    0,
+    0
+   ],
+   "tags": [
+    0,
+    0
+   ]
+  },
+  "bulk_and_latest_only_mb": 1.87
+ }
+}
