@@ -43,7 +43,7 @@ Nothing is ever overwritten.
 | `wxy_check.py` | oracle manifests for wxylib/core's `refs_windows` example |
 | `zarr_check.py` | zarr-python over fsspec reads the committed versions |
 | `brzarr.py` | a zarr-python store over one version: `xarray.to_zarr` becomes one atomic commit |
-| `zarr_write_check.py` | xarray writes, appends and races through `brzarr.py`; other readers read the result |
+| `zarr_write_check.py` | xarray writes, appends and races through `brzarr.py`, in Zarr format 3 and 2; other readers read the result |
 | `pawsey/run.sh` | one command for Setonix: the object-storage probe on Acacia, the walk with the store on Acacia, a GDAL read |
 | `results/` | raw numbers behind the tables in the design record |
 
@@ -66,7 +66,7 @@ Writing with xarray:
 ```python
 import brstore, brzarr
 z = brzarr.Session(brstore.Store("my-store"), writer="me")
-ds.to_zarr(z, zarr_format=2)           # held in memory
+ds.to_zarr(z)                          # held in memory (Zarr format 3; 2 on request)
 version = z.commit("first write")      # one pack, one new version
 ```
 
@@ -85,12 +85,12 @@ Acacia; committed versions read identically through GDAL 3.13.3,
 unmodified wxylib/core `wxy-refs`, zarr-python and DuckDB; four
 published flat stores (OISST, ESA CCI chlorophyll, GHRSST MUR at 30.7
 million rows, Bluelink salinity at 37.5 million) replay to versions equal to them row for row, and chunks read through
-one of them over https equal GDAL's read of the source files; `xarray.to_zarr` (write, append, region) lands as one atomic commit
-each; history costs about what Icechunk (manifests split per day) and
+one of them over https equal GDAL's read of the source files; `xarray.to_zarr` (write, append, region; Zarr format 3 or 2; local or
+S3) lands as one atomic commit each; history costs about what Icechunk (manifests split per day) and
 delta-rs cost.
 
 Not shown: pixels beyond a six-chunk sample of one real store, writers on separate machines, any
-service but Acacia, Zarr format 3 writes, branches. The design record lists these in full.
+service but Acacia, branches. The design record lists these in full.
 
 ## Licence
 

@@ -334,24 +334,38 @@ every data window identically.
 
 ### A Zarr write interface
 
-`brzarr.py` (about 300 lines) is a zarr-python 3 store, in Zarr format 2,
-over one brstore version. Reads come from the version the session opened
-on. Writes are held in memory; `commit()` puts the chunk bytes in one
-pack and makes one version. So one `xarray.Dataset.to_zarr()` call, with
-its metadata, coordinates and every chunk, is one atomic commit, and
-`to_zarr` itself is unchanged.
+`brzarr.py` (about 370 lines) is a zarr-python 3 store, in Zarr format 3
+or 2, over one brstore version. Reads come from the version the session
+opened on. Writes are held in memory; `commit()` puts the chunk bytes in
+one pack and makes one version. So one `xarray.Dataset.to_zarr()` call,
+with its metadata, coordinates and every chunk, is one atomic commit,
+and `to_zarr` itself is unchanged.
 
-`zarr_write_check.py` asserts, with xarray 2026.9 and zarr-python 3.4:
+The format is how a session speaks, not how the store holds an array.
+An array's codec is kept in its Zarr V2 spelling whenever it has one
+(bytes, then zstd, gzip, blosc or zlib, with or without shuffle), which
+covers what xarray writes by default in either format, so every reader
+of the table can use it. Any other V3 chain is kept as written and reads
+through a format 3 session only. A format 3 session serves the group's
+metadata with every array's inline, so a reader opens the store in one
+read.
+
+`zarr_write_check.py` asserts all of this in format 3 and again in
+format 2, with xarray 2026.9 and zarr-python 3.4, on a local directory
+and on S3 (a moto server):
 
 | Step | Result |
 |---|---|
 | `to_zarr` into an empty store | nothing stored before `commit()`; then one pack, version 1; reads back equal |
-| `to_zarr(append_dim="time")` | one commit; version 2 has 5 days, version 1 still has 3 |
+| `to_zarr(append_dim="time")` | one commit; version 2 has 5 days, version 1 still has 3; only the arrays along `time` get a new description |
 | two sessions write different days with `region=` | the second rebases over the first |
 | two sessions write the same day | the second is refused |
+| the version read through the other Zarr format | identical stored values |
 | zarr-python over the kerchunk render | identical |
-| unmodified `wxy-refs` on the three-file checkout | 3 of 3 windows identical |
-| a derived variable written beside references to netCDF files | one table; the new array in a pack, `sst` still mostly references |
+| a derived variable written beside references to netCDF files | one table; the new array in a pack; no other description changes |
+
+Run by hand: unmodified `wxy-refs` reads a version written in format 3
+from the three-file checkout, 3 of 3 windows identical.
 
 Each chunk xarray wrote is an ordinary reference row
 (`packs/<sha>.pack`, offset, size, `COMPRESSION=DEFLATE; FILTER=SHUFFLE;
@@ -359,9 +373,13 @@ ENDIANNESS=LITTLE`), so nothing downstream can tell a written chunk from
 a scanned one. The Zarr group's attributes are kept as `attrs` in the
 table header, which `wxy-refs` ignores.
 
-Not handled yet: Zarr format 3 (the array description holds a V2 codec
-object), nested groups, zero-dimensional arrays, deleting an array, and
-writes larger than memory (a session holds its chunks until commit).
+Not handled yet: nested groups, zero-dimensional arrays, sharding,
+deleting an array, and writes larger than memory (a session holds its
+chunks until commit). xarray spells a missing value differently in the
+two formats (the array's fill value in format 2, an attribute in format
+3); the session does not translate between them, so a version written
+in one format and read in the other gives the stored values, not masked
+ones.
 
 ## What this does not show
 
@@ -378,9 +396,9 @@ writes larger than memory (a session holds its chunks until commit).
   written; pack sizing and compaction are untested.
 - **Concurrent writers at scale,** and Icechunk or Delta on the OISST
   shape.
-- **The Zarr write interface beyond the small case.** Format 2 only,
-  one flat group, chunks held in memory until commit; not run on object
-  storage, with dask, or from zarrs.
+- **The Zarr write interface beyond the small case.** One flat group,
+  chunks held in memory until commit; run on S3 only against a moto
+  server, not on Acacia; not run with dask or from zarrs.
 - **Not attempted at all:** branches, credentials per prefix, a grace
   period in GC.
 
