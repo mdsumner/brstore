@@ -4,6 +4,9 @@
 # raad.virtualize hpc/pawsey/singularity-run.sh. From a Setonix login node:
 #
 #   bash pawsey/run.sh                 # probe, demo on Acacia, GDAL read
+#   bash pawsey/run.sh pixels [args]   # only: after "real", read chunks through
+#                                            # that store and compare with the
+#                                            # source files (args go to pixels.py)
 #   bash pawsey/run.sh real <flat>     # only: replay a real flat refs store
 #                                            # as a history, local. <flat> is a
 #                                            # directory or https URL holding
@@ -36,7 +39,9 @@ export AWS_REGION=${AWS_REGION:-us-east-1}
 RUN=$(date -u +%Y%m%dT%H%M%SZ)
 export BR_S3=${BR_S3_ROOT:-s3://aad-derived/raad-scratch/brstore-test}/$RUN
 export BR_WORK=${BR_WORK:-${MYSCRATCH:-$PWD}/brstore-work}
-export BR_MODE=${1:-all} BR_EXPORT=${2:-}
+export BR_MODE=${1:-all} BR_EXPORT=${2:-} BR_PIXEL_ARGS=
+if [ "$BR_MODE" = pixels ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
+export BR_PIXEL_ARGS
 mkdir -p "$BR_WORK"
 [ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
 command -v singularity > /dev/null || module load pawseyenv/2025.08 "${SINGULARITY_MODULE:-singularity/4.1.0-slurm}"
@@ -56,6 +61,10 @@ exec singularity exec $BIND "$SIF" bash -c '
   step() { echo; echo "######## $1"; shift; "$@" || { echo "######## FAILED: $1 (exit $?)"; fail=1; }; }
   if [ "$BR_MODE" = real ]; then
     step "a real flat refs store replayed as a history" python real_rows.py "$BR_EXPORT" "$BR_WORK/real"
+    [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
+  fi
+  if [ "$BR_MODE" = pixels ]; then
+    step "chunks read through the replayed store, against the source files" python pawsey/pixels.py "$BR_WORK/real/real-store" $BR_PIXEL_ARGS
     [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
   fi
   step "1. object storage: conditional PUT, write race, listing ($BR_S3)" python pawsey/probe.py "$BR_S3"
