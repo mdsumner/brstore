@@ -21,6 +21,8 @@ jobs:
           python zarr_check.py work
       - name: xarray writes through brzarr, and other readers read the result
         run: python zarr_write_check.py work-zw work
+      - name: A derived array (the bottom) committed beside the references it came from
+        run: python bottom_check.py ../fixtures/mdimrefs/bluelink-synthetic work-bottom
       - name: Real fixture tables replayed as histories, compared row for row
         run: |
           python real_rows.py ../fixtures/mdimrefs/oisst-198109 work-oisst

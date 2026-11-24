@@ -11,6 +11,10 @@
 #   bash pawsey/run.sh pixels [args]   # only: after "real", read chunks through
 #                                            # that store and compare with the
 #                                            # source files (args go to pixels.py)
+#   bash pawsey/run.sh bottom [args]   # only: after "real", derive the bottom
+#                                            # of a (time, level, y, x) array
+#                                            # and commit it beside the refs
+#                                            # (args go to derive_bottom.py)
 #   bash pawsey/run.sh real <flat>     # only: replay a real flat refs store
 #                                            # as a history, local. <flat> is a
 #                                            # directory or https URL holding
@@ -50,7 +54,7 @@ RUN=$(date -u +%Y%m%dT%H%M%SZ)
 export BR_S3=${BR_S3_ROOT:-s3://aad-derived/raad-scratch/brstore-test}/$RUN
 export BR_WORK=${BR_WORK:-${MYSCRATCH:-$PWD}/brstore-work}
 export BR_MODE=${1:-all} BR_EXPORT=${2:-} BR_PIXEL_ARGS=
-if [ "$BR_MODE" = pixels ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
+if [ "$BR_MODE" = pixels ] || [ "$BR_MODE" = bottom ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
 export BR_PIXEL_ARGS
 mkdir -p "$BR_WORK"
 [ "$BR_MODE" != all ] || [ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
@@ -98,6 +102,10 @@ exec $RUNNER bash -c '
   if [ "$BR_MODE" = zarr ]; then
     step "xarray writes, appends and races through brzarr, store on Acacia ($BR_S3)" env BRSTORE_ROOT="$BR_S3/zarr" python zarr_write_check.py "$BR_WORK/zarr"
     echo; echo "store written to $BR_S3 (remove with: rclone purge '"$REMOTE"':${BR_S3#s3://})"
+    [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
+  fi
+  if [ "$BR_MODE" = bottom ]; then
+    step "the bottom, derived through the replayed store and committed beside its references" python derive_bottom.py "$BR_WORK/real/real-store" $BR_PIXEL_ARGS
     [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
   fi
   if [ "$BR_MODE" = pixels ]; then

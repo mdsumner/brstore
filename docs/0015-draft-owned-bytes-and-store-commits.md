@@ -398,6 +398,40 @@ two formats (the array's fill value in format 2, an attribute in format
 in one format and read in the other gives the stored values, not masked
 ones.
 
+### A derived array beside its sources (2026-11-24)
+
+Some views of an array cannot be planned from its coordinates. The
+bottom of an ocean model field (at each cell, the value at the deepest
+level that has one) depends on the data, so a reader fetches every level
+to find it: 3,060 chunks a day for the Bluelink store above, to draw one
+map. That is a computed chunk in the sense of idea A, and the store is
+where its answer belongs.
+
+`derive_bottom.py` reads every level of a (time, level, y, x) array
+through a committed version's rows, a time step at a time, and commits two
+arrays of (time, y, x) to the same store: `<array>_bottom`, the value as
+stored (the source's type, packing and attributes carry over), and
+`<array>_bottom_level`, the level index it came from. Their chunks go into
+a pack and are ordinary rows, so a brzarr session, the kerchunk render and
+a checkout all see them as arrays on the store's own coordinates. Steps
+the store already holds are skipped, so the derived arrays grow by commits
+as the source does.
+
+Lineage is recorded twice. Each derived array's attributes carry
+`derived = {of, rule, written_by}`. Each commit's message names the steps
+written, the version read, and the identity of the source array's rows in
+that version: the key of its fragment list, which is a hash of its
+content and changes only when those rows do. That is enough to tell a
+derived step is stale; it is per commit, not per row.
+
+`bottom_check.py` runs it on the fixtures' `bluelink-synthetic` export
+(temp of 5 x 4 x 40 x 60 with netCDF sources): the derived arrays equal
+the bottom computed from the netCDF files by the netCDF library, xarray
+reads them through a session, the earlier version is unchanged, a second
+run writes nothing and a third adds the missing steps without touching
+the rows already held. There the bottom view goes from 64 chunks a step
+to 1. On a real store this has not been run yet.
+
 ## What this does not show
 
 - **Object storage beyond Acacia.** The conditional PUT is shown on
