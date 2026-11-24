@@ -37,3 +37,4 @@ jobs:
           python -c "import boto3; boto3.client('s3').create_bucket(Bucket='test')"
           python pawsey/probe.py s3://test/probe
           BRSTORE_ROOT=s3://test/walk python demo.py ../fixtures/mdimrefs work-s3
+          BRSTORE_ROOT=s3://test/zarr python zarr_write_check.py work-zw-s3

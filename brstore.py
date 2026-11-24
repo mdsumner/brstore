@@ -180,6 +180,8 @@ class S3Objects:
 def decode_v2(a, data):
     """Undo an array's Zarr V2 codec on one chunk's bytes."""
     codec = a.get("codec") or {}
+    if isinstance(codec, list):
+        raise NotImplementedError(f"{a['array']}: a V3 codec chain is decoded only through a brzarr session")
     if not (codec.get("compressor") or codec.get("filters")):
         return data
     import numcodecs

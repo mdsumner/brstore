@@ -1,45 +1,65 @@
 """A Zarr write interface over a brstore store.
 
-A Session is a zarr-python (3.x) Store speaking Zarr format 2. Reads come
+A Session is a zarr-python (3.x) Store, in Zarr format 2 or 3. Reads come
 from one committed version. Writes are held in memory until commit(), which
 puts the chunk bytes in one pack and makes one new version: everything a
 single xarray.Dataset.to_zarr() call wrote lands atomically, or not at all.
 
-  s = brstore.Store(root)
-  z = brzarr.Session(s, writer="me")
-  ds.to_zarr(z, zarr_format=2)
+  s = brstore.Store(root)                    # a directory, or s3://bucket/prefix
+  z = brzarr.Session(s, writer="me")         # zarr_format=3 unless told 2
+  ds.to_zarr(z)
   version = z.commit("first write")
 
-Not handled: nested groups, zero-dimensional arrays, Fortran order, deleting
-an array, Zarr format 3.
+The format is how a session speaks, not how the store holds an array: an
+array written in one format reads in the other, as stored values (xarray
+spells a missing value differently in the two formats, and that is not
+translated). An array's codec is kept
+in its Zarr V2 spelling whenever it has one (bytes, then zstd, gzip, blosc
+or zlib, with or without shuffle), so every reader of the table can use
+it; any other V3 chain is kept as written and reads through a format 3
+session only.
+
+Not handled: nested groups, zero-dimensional arrays, Fortran order, sharding,
+deleting an array.
 """
 import json
 
-import numpy as np
 from zarr.abc.store import Store as ZarrStore
 from zarr.core.buffer import default_buffer_prototype
 
 import brstore
 
-META = (".zgroup", ".zattrs", ".zarray", ".zmetadata")
+META = {2: (".zgroup", ".zattrs", ".zarray", ".zmetadata"), 3: ("zarr.json",)}
+V3_TYPES = {"bool": "b1", "int8": "i1", "int16": "i2", "int32": "i4", "int64": "i8", "uint8": "u1", "uint16": "u2",
+            "uint32": "u4", "uint64": "u8", "float32": "f4", "float64": "f8"}
+V3_NAMES = {v: k for k, v in V3_TYPES.items()}
+BLOSC_SHUFFLE = ["noshuffle", "shuffle", "bitshuffle"]
 
 
-def _info(zarray):
+def _info(a):
     """The per-row block-info text for chunks of this array."""
-    parts = []
-    comp = (zarray.get("compressor") or {}).get("id")
-    if comp:
-        parts.append("COMPRESSION=" + {"zlib": "DEFLATE", "gzip": "DEFLATE"}.get(comp, comp.upper()))
-    for f in zarray.get("filters") or []:
-        parts.append("FILTER=" + f["id"].upper())
-    if zarray["dtype"][0] in "<>":
-        parts.append("ENDIANNESS=" + ("LITTLE" if zarray["dtype"][0] == "<" else "BIG"))
+    parts, codec = [], a.get("codec") or {}
+    if isinstance(codec, list):
+        parts += ["COMPRESSION=" + c["name"].split(".")[-1].upper() for c in codec[1:]]
+    else:
+        comp = (codec.get("compressor") or {}).get("id")
+        if comp:
+            parts.append("COMPRESSION=" + {"zlib": "DEFLATE", "gzip": "DEFLATE"}.get(comp, comp.upper()))
+        for f in codec.get("filters") or []:
+            parts.append("FILTER=" + f["id"].upper())
+    if a["dtype"][0] in "<>":
+        parts.append("ENDIANNESS=" + ("LITTLE" if a["dtype"][0] == "<" else "BIG"))
     return "; ".join(parts)
+
+
+# -- Zarr format 2 metadata
 
 
 def zarray_of(a):
     """Zarr v2 array metadata for one array description."""
     codec = a.get("codec") or {}
+    if isinstance(codec, list):
+        raise NotImplementedError(f"{a['array']}: its codec has no Zarr V2 spelling; open the session with zarr_format=3")
     return dict(zarr_format=2, shape=a["shape"], chunks=a["chunks"], dtype=a["dtype"], order="C",
                 compressor=codec.get("compressor"), filters=codec.get("filters") or None,
                 fill_value=brstore._fill_json(a.get("fill"), a["dtype"]), dimension_separator=".")
@@ -61,12 +81,99 @@ def desc_of(name, zarray, zattrs):
                 attrs=attrs, affine=None, values=None)
 
 
-def _split(key):
-    """key -> (array or '', rest). Chunk keys come back with '.' separators."""
-    if "/" not in key:
-        return ("", key) if key in META else (key, "")
-    name, rest = key.split("/", 1)
-    return name, rest if rest in META else rest.replace("/", ".")
+# -- Zarr format 3 metadata
+
+
+def _v3_codecs(a):
+    """The V3 codec chain for an array description."""
+    codec, size = a.get("codec") or {}, int(a["dtype"][2:])
+    if isinstance(codec, list):
+        return codec
+    out = [{"name": "bytes", "configuration": {"endian": "big" if a["dtype"][0] == ">" else "little"}} if size > 1
+           else {"name": "bytes"}]
+    for f in codec.get("filters") or []:
+        out.append({"name": "numcodecs." + f["id"], "configuration": {k: v for k, v in f.items() if k != "id"}})
+    c = codec.get("compressor")
+    if c:
+        cfg = {k: v for k, v in c.items() if k != "id"}
+        if c["id"] == "zstd":
+            cfg = {"level": cfg.get("level", 0), "checksum": bool(cfg.get("checksum", False))}
+        elif c["id"] == "gzip":
+            cfg = {"level": cfg.get("level", 5)}
+        elif c["id"] == "blosc":
+            cfg = {"cname": cfg.get("cname", "zstd"), "clevel": cfg.get("clevel", 5), "typesize": size,
+                   "shuffle": BLOSC_SHUFFLE[cfg.get("shuffle", 1)], "blocksize": cfg.get("blocksize", 0)}
+        out.append({"name": c["id"] if c["id"] in ("zstd", "gzip", "blosc") else "numcodecs." + c["id"],
+                    "configuration": cfg})
+    return out
+
+
+def _v2_codec(codecs):
+    """(endian, V2 codec object) for a V3 chain that has a V2 spelling, else None."""
+    if not codecs or codecs[0]["name"] != "bytes":
+        return None
+    endian = (codecs[0].get("configuration") or {}).get("endian", "little")
+    filters, comp = [], None
+    for c in codecs[1:]:
+        n, cfg = c["name"], {k: v for k, v in (c.get("configuration") or {}).items() if k != "id"}
+        if comp is not None:  # V2 has nothing after the compressor
+            return None
+        if n == "numcodecs.shuffle":
+            filters.append({"id": "shuffle", **cfg})
+        elif n == "zstd" and not cfg.get("checksum"):
+            comp = {"id": "zstd", "level": cfg.get("level", 0)}
+        elif n == "gzip":
+            comp = {"id": "gzip", "level": cfg.get("level", 5)}
+        elif n == "blosc":
+            comp = {"id": "blosc", "cname": cfg.get("cname", "zstd"), "clevel": cfg.get("clevel", 5),
+                    "shuffle": BLOSC_SHUFFLE.index(cfg.get("shuffle", "noshuffle")), "blocksize": cfg.get("blocksize", 0)}
+        elif n == "numcodecs.zlib":
+            comp = {"id": "zlib", **cfg}
+        else:
+            return None
+    return endian, {"compressor": comp, "filters": filters or None}
+
+
+def _v3_fill(a):
+    fill = brstore._fill_json(a.get("fill"), a["dtype"])
+    if fill is None:  # V3 requires one
+        return {"f": 0.0, "b": False}.get(a["dtype"][1], 0)
+    return fill
+
+
+def v3_of(a):
+    """Zarr v3 array metadata for one array description."""
+    if a["dtype"][1:] not in V3_NAMES:
+        raise NotImplementedError(f"{a['array']}: dtype {a['dtype']} has no Zarr V3 data type here")
+    return dict(shape=a["shape"], data_type=V3_NAMES[a["dtype"][1:]],
+                chunk_grid={"name": "regular", "configuration": {"chunk_shape": a["chunks"]}},
+                chunk_key_encoding={"name": "default", "configuration": {"separator": "/"}},
+                fill_value=_v3_fill(a), codecs=_v3_codecs(a), attributes=dict(a.get("attrs") or {}),
+                dimension_names=a["dims"], zarr_format=3, node_type="array", storage_transformers=[])
+
+
+def desc_of_v3(name, doc, old=None):
+    """The array description for Zarr v3 metadata as zarr-python wrote it."""
+    if not doc["shape"]:
+        raise NotImplementedError(f"{name}: zero-dimensional arrays are not handled yet")
+    if doc["chunk_grid"]["name"] != "regular" or doc.get("storage_transformers"):
+        raise NotImplementedError(f"{name}: only a regular chunk grid with no storage transformer")
+    if doc["data_type"] not in V3_TYPES:
+        raise NotImplementedError(f"{name}: data type {doc['data_type']} is not handled yet")
+    if any(c["name"] in ("sharding_indexed", "transpose") for c in doc["codecs"]):
+        raise NotImplementedError(f"{name}: sharding and transpose are not handled")
+    kind = V3_TYPES[doc["data_type"]]
+    v2 = _v2_codec(doc["codecs"])
+    endian = "|" if kind[1] == "1" else ("<" if (v2[0] if v2 else (doc["codecs"][0].get("configuration") or {}).get(
+        "endian", "little")) == "little" else ">")
+    dims = doc.get("dimension_names") or [f"{name}_dim{i}" for i in range(len(doc["shape"]))]
+    desc = dict(array=name, kind="coord" if dims == [name] else "data", storage="referenced", dims=dims,
+                shape=list(doc["shape"]), chunks=list(doc["chunk_grid"]["configuration"]["chunk_shape"]),
+                dtype=endian + kind, fill=str(doc["fill_value"]), codec=v2[1] if v2 else doc["codecs"],
+                attrs=dict(doc.get("attributes") or {}), affine=None, values=None)
+    if old is not None and old.get("fill") is None and doc["fill_value"] == _v3_fill(old):
+        desc["fill"] = None  # the fill this session invented to serve the array; the store still has none
+    return desc
 
 
 class Session(ZarrStore):
@@ -75,11 +182,13 @@ class Session(ZarrStore):
     supports_listing = True
     supports_partial_writes = False
 
-    def __init__(self, store, writer="zarr", version=None, resolve=None, read_only=False):
+    def __init__(self, store, writer="zarr", version=None, resolve=None, read_only=False, zarr_format=3):
         """resolve maps the path of a row outside the store to something open()
         can read; without it only chunks held in packs can be read back."""
         super().__init__(read_only=read_only)
-        self.s, self.writer, self.resolve = store, writer, resolve
+        if zarr_format not in (2, 3):
+            raise ValueError("zarr_format is 2 or 3")
+        self.s, self.writer, self.resolve, self.fmt = store, writer, resolve, zarr_format
         self._reset(store.latest() if version is None else store.manifest(version)["version"])
 
     def _reset(self, base):
@@ -91,21 +200,46 @@ class Session(ZarrStore):
         self._frag = {}
 
     def with_read_only(self, read_only=False):
-        return Session(self.s, self.writer, self.base, self.resolve, read_only)
+        return Session(self.s, self.writer, self.base, self.resolve, read_only, self.fmt)
 
     def __eq__(self, other):
-        return isinstance(other, Session) and other.s.o is self.s.o and other.base == self.base
+        return isinstance(other, Session) and other.s.o is self.s.o and other.base == self.base and other.fmt == self.fmt
 
     def __hash__(self):
         return id(self)
 
-    # -- what the session currently looks like, as Zarr v2 keys
+    # -- keys
 
-    def _zarray(self, name):
-        k = f"{name}/.zarray"
+    def _split(self, key):
+        """key -> (array or '', metadata name or None, chunk key tuple or None)."""
+        if key.rpartition("/")[2] in META[self.fmt]:
+            name, _, rest = key.rpartition("/")
+            return name, rest, None
+        name, _, rest = key.partition("/")
+        if self.fmt == 3:
+            if not (rest == "c" or rest[:2] in ("c/", "c.")):
+                return name, None, None
+            rest = rest[2:]
+        parts = rest.replace("/", ".").split(".")
+        return name, None, tuple(int(p) for p in parts) if all(p.isdigit() for p in parts) else None
+
+    def _array_doc_key(self, name):
+        return f"{name}/.zarray" if self.fmt == 2 else f"{name}/zarr.json"
+
+    def _names(self):
+        tail = "/" + self._array_doc_key("")[1:]
+        new = {k[: -len(tail)] for k in self.meta if k.endswith(tail)}
+        return sorted(set(self.descs) | new)
+
+    # -- what the session currently looks like, as Zarr metadata documents
+
+    def _array_doc(self, name):
+        k = self._array_doc_key(name)
         if k in self.meta:
             return json.loads(self.meta[k])
-        return zarray_of(self.descs[name]) if name in self.descs else None
+        if name not in self.descs:
+            return None
+        return zarray_of(self.descs[name]) if self.fmt == 2 else v3_of(self.descs[name])
 
     def _zattrs(self, name):
         k = f"{name}/.zattrs"
@@ -116,34 +250,42 @@ class Session(ZarrStore):
             return dict(a.get("attrs") or {}, _ARRAY_DIMENSIONS=a["dims"])
         return None
 
-    def _names(self):
-        new = {k.split("/")[0] for k in self.meta if k.endswith("/.zarray")}
-        return sorted(set(self.descs) | new)
+    def _group_attrs(self):
+        if self.fmt == 2 and ".zattrs" in self.meta:
+            return json.loads(self.meta[".zattrs"])
+        if self.fmt == 3 and "zarr.json" in self.meta:
+            return json.loads(self.meta["zarr.json"]).get("attributes") or {}
+        return self.m["table"].get("attrs") or {}
 
-    def _meta_doc(self, key):
-        name, rest = _split(key)
-        if rest == ".zmetadata":
-            if key in self.meta:
-                return self.meta[key]
-            docs = {k: json.loads(self._meta_doc(k)) for k in self._meta_keys() if k != ".zmetadata"}
-            return json.dumps({"zarr_consolidated_format": 1, "metadata": docs}).encode() if docs else None
-        if key in self.meta:
-            return self.meta[key]
-        if name == "":
-            if not self._names() or rest == ".zarray":
+    def _meta_doc(self, name, which):
+        if name == "" and not self._names():
+            return None
+        if self.fmt == 3:
+            if name:
+                doc = self._array_doc(name)
+            else:  # the group, with every array's metadata inline so a reader opens it in one read
+                arrays = {n: self._array_doc(n) for n in self._names()}
+                doc = dict(attributes=self._group_attrs(), zarr_format=3, node_type="group",
+                           consolidated_metadata=dict(kind="inline", must_understand=False, metadata=arrays))
+        elif which == ".zmetadata":
+            if name:
                 return None
-            doc = {"zarr_format": 2} if rest == ".zgroup" else self.m["table"].get("attrs") or {}
+            docs = {k: json.loads(self._meta_doc(*self._split(k)[:2])) for k in self._meta_keys() if k != ".zmetadata"}
+            doc = {"zarr_consolidated_format": 1, "metadata": docs}
+        elif name == "":
+            doc = None if which == ".zarray" else ({"zarr_format": 2} if which == ".zgroup" else self._group_attrs())
+        elif which == ".zgroup":
+            doc = None
         else:
-            doc = self._zarray(name) if rest == ".zarray" else self._zattrs(name)
+            doc = self._array_doc(name) if which == ".zarray" else self._zattrs(name)
         return None if doc is None else json.dumps(doc).encode()
 
     def _meta_keys(self):
-        keys = set(self.meta)
-        if self._names():
-            keys |= {".zgroup", ".zattrs", ".zmetadata"}
-        for n in self.descs:
-            keys |= {f"{n}/.zarray", f"{n}/.zattrs"}
-        return sorted(keys)
+        if not self._names():
+            return []
+        if self.fmt == 3:
+            return ["zarr.json"] + [f"{n}/zarr.json" for n in self._names()]
+        return [".zattrs", ".zgroup", ".zmetadata"] + [f"{n}/{w}" for n in self._names() for w in (".zarray", ".zattrs")]
 
     def _rows(self, name):
         """Committed rows of one array, by key."""
@@ -181,18 +323,15 @@ class Session(ZarrStore):
                 out.add((name, (0,)))
             else:
                 out |= {(name, k) for k, r in self._rows(name).items() if r["present"]}
+        if self.fmt == 3:
+            return sorted(f"{n}/c/" + "/".join(map(str, k)) for n, k in out - gone)
         return sorted(f"{n}/" + ".".join(map(str, k)) for n, k in out - gone)
 
     # -- the zarr Store interface
 
     async def get(self, key, prototype=None, byte_range=None):
-        name, rest = _split(key)
-        if rest in META:
-            b = self._meta_doc(key)
-        elif rest and all(p.isdigit() for p in rest.split(".")):
-            b = self._chunk(name, tuple(int(p) for p in rest.split(".")))
-        else:
-            b = None
+        name, which, ck = self._split(key)
+        b = self._meta_doc(name, which) if which else (self._chunk(name, ck) if ck else None)
         if b is None:
             return None
         if byte_range is not None:
@@ -207,25 +346,27 @@ class Session(ZarrStore):
 
     async def set(self, key, value):
         self._check_writable()
-        name, rest = _split(key)
+        name, which, ck = self._split(key)
         data = value.to_bytes()
-        if rest in META:
-            if name == "" and rest == ".zgroup" or rest != ".zgroup":
-                self.meta[key] = data
-            else:
+        if which:
+            nested = name and (which == ".zgroup" or (self.fmt == 3 and json.loads(data).get("node_type") == "group"))
+            if nested or "/" in name:
                 raise NotImplementedError(f"nested group {name!r} is not handled")
+            self.meta[key] = data
+        elif ck:
+            self.chunks[(name, ck)] = data
         else:
-            self.chunks[(name, tuple(int(p) for p in rest.split(".")))] = data
+            raise KeyError(f"not a Zarr format {self.fmt} key: {key}")
 
     async def delete(self, key):
         self._check_writable()
-        name, rest = _split(key)
-        if rest in META:
+        name, which, ck = self._split(key)
+        if which:
             if key not in self.meta and name in self.descs:
                 raise NotImplementedError(f"deleting the committed array {name!r} is not handled")
             self.meta.pop(key, None)
-        elif rest:
-            self.chunks[(name, tuple(int(p) for p in rest.split(".")))] = None
+        elif ck:
+            self.chunks[(name, ck)] = None
 
     async def list(self):
         for k in self._meta_keys() + self._chunk_keys():
@@ -249,25 +390,34 @@ class Session(ZarrStore):
 
     # -- commit
 
+    def _pending_desc(self, name):
+        """The description an array's written metadata asks for, or None when
+        it is what the session served for the committed array."""
+        old = self.descs.get(name)
+        if self.fmt == 3:
+            doc = self._array_doc(name)
+            if old is not None and doc == v3_of(old):
+                return None
+            return desc_of_v3(name, doc, old)
+        return desc_of(name, self._array_doc(name), self._zattrs(name))
+
     def commit(self, message, max_tries=20):
         """Everything written since the session opened becomes one version."""
         t = brstore.Txn(self.s, self.base, self.writer)
-        changed = {k.split("/")[0] for k in self.meta if "/" in k and not k.endswith(".zmetadata")}
+        changed = {k.rpartition("/")[0] for k in self.meta if "/" in k}
         for name in sorted(changed):
-            desc = desc_of(name, self._zarray(name), self._zattrs(name))
-            if desc != self.descs.get(name):
-                if name in self.descs and len(desc["shape"]) != len(self.descs[name]["shape"]):
-                    raise NotImplementedError(f"{name}: changing the number of dimensions is not handled")
-                old = self.descs.get(name)
-                if old and old["storage"] != "referenced" and (name, (0,)) not in self.chunks:
-                    # an inline coordinate being extended: its values become chunk 0
-                    self.chunks[(name, (0,))] = self._chunk(name, (0,))
-                t.put_array(desc)
-                self.descs[name] = desc
-        if ".zattrs" in self.meta:
-            attrs = json.loads(self.meta[".zattrs"])
-            if attrs != (self.m["table"].get("attrs") or {}):
-                t.put_group_attrs(attrs)
+            desc, old = self._pending_desc(name), self.descs.get(name)
+            if desc is None or desc == old:
+                continue
+            if old and len(desc["shape"]) != len(old["shape"]):
+                raise NotImplementedError(f"{name}: changing the number of dimensions is not handled")
+            if old and old["storage"] != "referenced" and (name, (0,)) not in self.chunks:
+                # an inline coordinate being extended: its values become chunk 0
+                self.chunks[(name, (0,))] = self._chunk(name, (0,))
+            t.put_array(desc)
+            self.descs[name] = desc
+        if self._group_attrs() != (self.m["table"].get("attrs") or {}):
+            t.put_group_attrs(self._group_attrs())
         for (name, key), data in sorted(self.chunks.items()):
             if name not in self.descs:
                 raise KeyError(f"chunk written for {name!r}, which has no metadata")
@@ -276,7 +426,7 @@ class Session(ZarrStore):
             if data is None:
                 t.put_absent(name, key)
             else:
-                t.write_chunk(name, key, data, _info(zarray_of(self.descs[name])))
+                t.write_chunk(name, key, data, _info(self.descs[name]))
         if not (t.arrays or t.bytes or t.rows or t.group_attrs is not None):
             return self.base
         v = t.commit(message, max_tries)
