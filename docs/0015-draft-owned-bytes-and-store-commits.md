@@ -351,8 +351,10 @@ metadata with every array's inline, so a reader opens the store in one
 read.
 
 `zarr_write_check.py` asserts all of this in format 3 and again in
-format 2, with xarray 2026.9 and zarr-python 3.4, on a local directory
-and on S3 (a moto server):
+format 2, with xarray 2026.9 and zarr-python 3.4, on a local directory,
+on S3 (a moto server), and on Acacia (run by Michael on Setonix with no
+container, 2026-11-24 04:15 UTC, zarr-python 3.1.6: all steps pass in
+both formats):
 
 | Step | Result |
 |---|---|
@@ -397,8 +399,8 @@ ones.
 - **Concurrent writers at scale,** and Icechunk or Delta on the OISST
   shape.
 - **The Zarr write interface beyond the small case.** One flat group,
-  chunks held in memory until commit; run on S3 only against a moto
-  server, not on Acacia; not run with dask or from zarrs.
+  chunks held in memory until commit, a few kilobytes written; not run
+  with dask or from zarrs.
 - **Not attempted at all:** branches, credentials per prefix, a grace
   period in GC.
 

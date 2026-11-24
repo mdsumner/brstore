@@ -88,7 +88,7 @@ unmodified wxylib/core `wxy-refs`, zarr-python and DuckDB; four
 published flat stores (OISST, ESA CCI chlorophyll, GHRSST MUR at 30.7
 million rows, Bluelink salinity at 37.5 million) replay to versions equal to them row for row, and chunks read through
 one of them over https equal GDAL's read of the source files; `xarray.to_zarr` (write, append, region; Zarr format 3 or 2; local or
-S3) lands as one atomic commit each; history costs about what Icechunk (manifests split per day) and
+on Acacia) lands as one atomic commit each; history costs about what Icechunk (manifests split per day) and
 delta-rs cost.
 
 Not shown: pixels beyond a six-chunk sample of one real store, writers on separate machines, any
