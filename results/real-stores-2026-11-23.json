@@ -252,6 +252,36 @@
     "through_derived": 2
    },
    "seconds": 11.0
+  },
+  "materialize": {
+   "run": "Setonix login node, by Michael, 2026-11-24 about 22:35 UTC: bash pawsey/run.sh materialize --array salt --sel Time=12263:12265 --compare",
+   "sources": "over https through the public remap (NCI THREDDS), 4 at a time",
+   "plan": {
+    "rows": 6120,
+    "distinct_ranges": 6120,
+    "requests": 19,
+    "commits": 1,
+    "files": 1,
+    "mb_named_by_rows": 290.618,
+    "mb_distinct": 290.618,
+    "mb_to_ask_for": 291.003
+   },
+   "one_request_a_row": {
+    "requests": 6120,
+    "bytes_asked_for": 304735405,
+    "seconds": 380.56
+   },
+   "materialized": {
+    "from_version": 61,
+    "version": 62,
+    "rows": 6120,
+    "distinct_ranges": 6120,
+    "requests": 19,
+    "seconds": 42.76,
+    "mb_asked_for": 291.003,
+    "mb_packed": 290.408
+   },
+   "note": "one run, the one-request-a-row pass first; the second pass may have gained from anything the server kept from the first"
   }
  }
 }
