@@ -430,7 +430,19 @@ the bottom computed from the netCDF files by the netCDF library, xarray
 reads them through a session, the earlier version is unchanged, a second
 run writes nothing and a third adds the missing steps without touching
 the rows already held. There the bottom view goes from 64 chunks a step
-to 1. On a real store this has not been run yet.
+to 1.
+
+On the real Bluelink salinity store (`bash nci/run.sh bottom`, a Gadi
+login node, by Michael, 2026-11-24 about 09:05 UTC), reading `/g/data` in
+place through version 61: the last two days took 6,120 source chunks
+(290.6 MB) and 11 seconds, and were committed as version 62, 6.1 MB of
+derived chunks for both arrays and both days. 3,725,264 of the 5,400,000
+cells have a bottom, the deepest at level index 50. A bottom view of a
+day is then 2 chunks where it was 3,060. Not checked there: the values
+against an independent reader (the fixture check does that), and a
+reader other than this script opening the derived arrays. At this rate
+the whole history (12,265 days) would be about 19 hours of one process
+and about 38 GB of derived chunks, a batch job and not a login node run.
 
 ## What this does not show
 
