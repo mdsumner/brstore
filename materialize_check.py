@@ -16,7 +16,8 @@ one range. Then
    of the source file, no row of the selection names a source, a second run
    asks for nothing, and the version before still names the sources;
  - a selection materializes only the chunks it touches; in small batches a
-   range held by an earlier commit is not fetched again;
+   range held by an earlier commit is not fetched again; a stride holds
+   every Nth step and a finer one then fetches only the steps between;
  - a Keeper fetches on first read, shares a range between keys, and a new
    Keeper on the same store asks the server for nothing.
 """
@@ -160,6 +161,22 @@ for name in ("temp", "temp_same"):
         if row["present"]:
             assert row["path"].startswith("packs/") and s4.o.get(row["path"], row["offset"], row["size"]) == want[(name, tuple(row[f"dim_{d}"] for d in range(4)))]
 print(f"   {len(rb['versions'])} commits, {rb['requests']} requests as planned, {rb['distinct_ranges']} distinct ranges fetched once each; every chunk equal to the source's")
+
+print("6c. a stride: every other step first, then every step fetches only the ones between")
+s5, c1 = build("store-stride")
+T = A["dims"][0]
+root5 = [os.path.join(WORK, "store-stride"), "--array", "temp", "--target", "fixture", "--base", BASE, "--gap", "0"]
+steps_held = lambda: sorted({row["dim_0"] for row in s5.refs_rows(s5.manifest(s5.latest()), "temp") if row["present"] and row["path"].startswith("packs/")})  # noqa: E731
+seen.clear()
+assert materialize.main(root5 + ["--sel", f"{T}=0:{nt}:2"]) == 0
+assert steps_held() == list(range(0, nt, 2)), steps_held()
+coarse = len(seen)
+seen.clear()
+assert materialize.main(root5 + ["--sel", f"{T}=0:{nt}:1"]) == 0
+assert steps_held() == list(range(nt)) and 0 < len(seen), steps_held()
+between = sum(1 for k in want if k[0] == "temp" and k[1][0] % 2 == 1)
+assert sum(z for _, _, z in seen) == sum(len(b) for k, b in want.items() if k[0] == "temp" and k[1][0] % 2 == 1), "only the steps between were fetched"
+print(f"   stride 2 held steps {list(range(0, nt, 2))} in {coarse} requests; stride 1 then fetched only the {between} chunks of the steps between, in {len(seen)}")
 
 print("7. a Keeper: fetched on first read, kept from then on")
 s3, k1 = build("store-keep")

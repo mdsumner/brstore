@@ -1,6 +1,6 @@
 """Bring the bytes a virtual store points at into the store, each range once.
 
-  python materialize.py <store root> [--array NAME ...] [--sel DIM=LO:HI ...]
+  python materialize.py <store root> [--array NAME ...] [--sel DIM=LO:HI[:STEP] ...]
                         [--plan] [--compare] [--target public] [--base DIR]
                         [--jobs 4] [--gap KB] [--most MB] [--batch MB]
 
@@ -27,8 +27,10 @@ The plan is known before any byte moves: --plan prints it and stops.
 
 Selection: --array (repeatable; default every referenced data array) and
 --sel DIM=LO:HI in cells, half open, applied to each array that has DIM
-(--sel time=0:31 --sel yt_ocean=100:400). Whole chunks are kept: a
-selection picks the chunks it touches. Chunks keep the source's shape and
+(--sel time=0:31 --sel yt_ocean=100:400). DIM=LO:HI:STEP takes every STEP-th
+cell: --sel time=0:2000:8 is every eighth step, and a later run with :4
+fetches only the steps between, since the others are held by then. Whole
+chunks are kept: a selection picks the chunks it touches. Chunks keep the source's shape and
 encoding, byte for byte; a different chunking or a subset inside a chunk is
 a derivation (derive_levels.py is one), which also reads each source chunk
 once.
@@ -90,13 +92,19 @@ def source_reader(table, target="public", base=""):
 
 
 def chunk_ranges(a, sel):
-    """For each dimension of array a, the [lo, hi) range of chunk indexes the
-    selection touches (sel: {dim: (lo, hi)} in cells), or None for all."""
+    """For each dimension of array a, what the selection touches of it, or
+    None for all: (lo, hi, picked), the [lo, hi) range of chunk indexes and,
+    where a stride skips whole chunks, the chunk indexes it lands in.
+    sel: {dim: (lo, hi[, step])} in cells."""
     out = []
     for d, n, c in zip(a["dims"], a["shape"], a["chunks"]):
         if d in sel:
             lo, hi = max(0, sel[d][0]), min(n, sel[d][1])
-            out.append((lo // c, -(-hi // c)) if hi > lo else (0, 0))
+            step = sel[d][2] if len(sel[d]) > 2 else 1
+            if hi <= lo:
+                out.append((0, 0, None))
+            else:
+                out.append((lo // c, -(-hi // c), sorted({i // c for i in range(lo, hi, step)}) if step > c else None))
         else:
             out.append(None)
     return out
@@ -117,6 +125,8 @@ def planned_rows(s, m, arrays, sel):
             for d in range(nd):
                 if rng[d] is not None:
                     keep = pc.and_(keep, pc.and_(pc.greater_equal(t[f"dim_{d}"], rng[d][0]), pc.less(t[f"dim_{d}"], rng[d][1])))
+                    if rng[d][2] is not None:
+                        keep = pc.and_(keep, pc.is_in(t[f"dim_{d}"], value_set=pa.array(rng[d][2], pa.int64())))
             t = t.filter(keep)
             if t.num_rows:
                 yield a["array"], nd, t
@@ -339,11 +349,12 @@ class Keeper:
 
 
 def parse_sel(items):
+    """DIM=LO:HI or DIM=LO:HI:STEP, in cells, half open; either end may be left out."""
     sel = {}
     for it in items or []:
         d, _, r = it.partition("=")
-        lo, _, hi = r.partition(":")
-        sel[d] = (int(lo or 0), int(hi) if hi else 2**62)
+        lo, hi, step = (r.split(":") + ["", ""])[:3]
+        sel[d] = (int(lo or 0), int(hi) if hi else 2**62, max(1, int(step or 1)))
     return sel
 
 
@@ -351,7 +362,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("root")
     ap.add_argument("--array", action="append")
-    ap.add_argument("--sel", action="append", help="DIM=LO:HI in cells, half open")
+    ap.add_argument("--sel", action="append", help="DIM=LO:HI[:STEP] in cells, half open")
     ap.add_argument("--plan", action="store_true", help="print the plan and stop")
     ap.add_argument("--compare", action="store_true", help="also time one request a chunk row, writing nothing")
     ap.add_argument("--target", default="public")
