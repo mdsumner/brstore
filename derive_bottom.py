@@ -26,7 +26,8 @@ Steps: the last --steps of the array by default, or --steps of them from
 --first. Steps the store already holds a bottom for are skipped. Source
 bytes are fetched as pixels.py fetches them (--target names the remap rule;
 a name with no rule reads the paths as stored), --jobs at a time. Keep
---jobs low against a server: NCI's THREDDS refuses somewhere past ten.
+--jobs low against a server: at most 10 are used, which NCI's THREDDS is
+thought to take; it refuses somewhere between 10 and 20.
 """
 import argparse, io, json, os, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -100,7 +101,7 @@ def main(argv=None):
     ap.add_argument("--deepest", choices=["last", "first"], default="last",
                     help="which end of the level dimension is the deepest")
     A = ap.parse_args(argv)
-    jobs = max(1, min(A.jobs, 8))
+    jobs = max(1, min(A.jobs, 10))  # NCI THREDDS: ten at once is thought safe, not yet tested in detail
 
     s = brstore.Store(A.root)
     m = s.manifest(s.latest())
