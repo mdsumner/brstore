@@ -442,7 +442,7 @@ day is then 2 chunks where it was 3,060. Not checked there: the values
 against an independent reader (the fixture check does that), and a
 reader other than this script opening the derived arrays. At this rate
 the whole history (12,265 days) would be about 19 hours of one process
-and about 38 GB of derived chunks, a batch job and not a login node run.
+and about 37 GB of derived chunks, a batch job and not a login node run.
 
 ## What this does not show
 
