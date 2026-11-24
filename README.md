@@ -48,6 +48,8 @@ Nothing is ever overwritten.
 | `bottom_check.py` | that derivation on a fixture with netCDF sources, against the netCDF library's own read |
 | `derive_levels.py` | levels a source never had: `<array>_x2`, `_x4`, ... each the 2 by 2 mean of the one before, committed beside the source with their own coordinates |
 | `levels_check.py` | that chain on the same fixture, against means computed from the netCDF library's own read |
+| `materialize.py` | bring the bytes a virtual store points at into the store: planned from the rows, each distinct range fetched once, neighbours joined, rows rewritten to packs; or on first read, then kept (`Keeper`) |
+| `materialize_check.py` | that on the same fixture behind a counting HTTP server, against one request a chunk row |
 | `pawsey/run.sh` | one command for Setonix: the object-storage probe on Acacia, the walk with the store on Acacia, a GDAL read |
 | `pawsey/pixels.py` | chunks read through a committed version, compared with the source files' own blocks |
 | `nci/run.sh` | the replay and the pixel check on NCI Gadi, reading `/g/data` sources in place |
