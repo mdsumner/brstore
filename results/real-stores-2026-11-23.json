@@ -221,6 +221,37 @@
     "identical": 6,
     "byte_range_as_reader_reports": "not checked (GDAL 3.10 has no raw block info)"
    }
+  },
+  "derived_bottom": {
+   "run": "bash nci/run.sh bottom, Gadi login node, by Michael, 2026-11-24 about 09:05 UTC, /g/data read in place",
+   "array": "salt",
+   "derived": [
+    "salt_bottom",
+    "salt_bottom_level"
+   ],
+   "steps": [
+    12263,
+    12264
+   ],
+   "from_version": 61,
+   "source_rows": "52eb9d72967e5db5",
+   "version": 62,
+   "source_chunks_read": 6120,
+   "source_mb_read": 290.62,
+   "derived_chunk_shape": [
+    1,
+    1500,
+    1800
+   ],
+   "derived_mb_written": 6.141,
+   "cells_with_a_bottom": 3725264,
+   "cells": 5400000,
+   "deepest_index": 50,
+   "bottom_view_chunks_per_step": {
+    "through_levels": 3060,
+    "through_derived": 2
+   },
+   "seconds": 11.0
   }
  }
 }

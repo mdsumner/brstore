@@ -44,6 +44,8 @@ Nothing is ever overwritten.
 | `zarr_check.py` | zarr-python over fsspec reads the committed versions |
 | `brzarr.py` | a zarr-python store over one version: `xarray.to_zarr` becomes one atomic commit |
 | `zarr_write_check.py` | xarray writes, appends and races through `brzarr.py`, in Zarr format 3 and 2; other readers read the result |
+| `derive_bottom.py` | a derived array beside its sources: the bottom of a (time, level, y, x) array, computed through a version and committed to the same store |
+| `bottom_check.py` | that derivation on a fixture with netCDF sources, against the netCDF library's own read |
 | `pawsey/run.sh` | one command for Setonix: the object-storage probe on Acacia, the walk with the store on Acacia, a GDAL read |
 | `pawsey/pixels.py` | chunks read through a committed version, compared with the source files' own blocks |
 | `nci/run.sh` | the replay and the pixel check on NCI Gadi, reading `/g/data` sources in place |
