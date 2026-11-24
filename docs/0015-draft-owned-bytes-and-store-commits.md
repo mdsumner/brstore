@@ -302,6 +302,21 @@ holds (offsets up to 4.58 GB into a file). Two of the six are from the
 last day, which an append commit wrote. Six chunks of 37.5 million show
 the path end to end, not every row.
 
+The same store on NCI Gadi, sources read in place (`nci/run.sh`, a login
+node, 2026-11-24 04:20 UTC, Python 3.12 from the `conda/analysis3`
+module with no container of ours): the replay equals the export again
+(37,530,900 rows, 28 s for the bulk load, 0.08 s a commit, peak memory
+956 MB), and the same six chunks, read from `/g/data/gb6/` at the paths
+the rows hold with no remap, are identical to GDAL 3.10.2 reading the
+same files. The offsets and sizes are the ones the Setonix run fetched
+over THREDDS, so one set of rows serves both a site that holds the files
+and a site that reaches them over https. Two limits: GDAL 3.10 does not
+report raw block offsets, so on Gadi only the decoded values were
+compared; and each site replayed its own copy of the store (fragments
+298 MB on Gadi, 286 MB on Setonix, from different pyarrow versions), so
+this is the same rows at two sites, not yet one stored version read by
+both.
+
 ### Coordinates as referenced arrays
 
 "A write is a harvest" applies to coordinates too. `put_coord` holds a
@@ -391,7 +406,7 @@ ones.
 - **Pixels beyond a sample.** Four published stores replay row for row
   (OISST, ESA CCI chlorophyll, GHRSST MUR at 30.7 million rows, Bluelink
   salinity at 37.5 million), but pixels were compared with GDAL on six
-  chunks of one of them and on the 27-reference fixture. No TIFF source
+  chunks of one of them (at two sites) and on the 27-reference fixture. No TIFF source
   (the GHRSST store) has had pixels read. The cost comparison with
   Icechunk and delta-rs still uses synthetic rows.
 - **Held bytes at scale.** No pack larger than a few kilobytes was
