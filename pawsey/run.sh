@@ -15,6 +15,9 @@
 #                                            # of a (time, level, y, x) array
 #                                            # and commit it beside the refs
 #                                            # (args go to derive_bottom.py)
+#   bash pawsey/run.sh levels [args]   # only: after "real", derive the coarser
+#                                            # levels the source lacks and commit
+#                                            # them (args go to derive_levels.py)
 #   bash pawsey/run.sh real <flat>     # only: replay a real flat refs store
 #                                            # as a history, local. <flat> is a
 #                                            # directory or https URL holding
@@ -54,7 +57,7 @@ RUN=$(date -u +%Y%m%dT%H%M%SZ)
 export BR_S3=${BR_S3_ROOT:-s3://aad-derived/raad-scratch/brstore-test}/$RUN
 export BR_WORK=${BR_WORK:-${MYSCRATCH:-$PWD}/brstore-work}
 export BR_MODE=${1:-all} BR_EXPORT=${2:-} BR_PIXEL_ARGS=
-if [ "$BR_MODE" = pixels ] || [ "$BR_MODE" = bottom ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
+if [ "$BR_MODE" = pixels ] || [ "$BR_MODE" = bottom ] || [ "$BR_MODE" = levels ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
 export BR_PIXEL_ARGS
 mkdir -p "$BR_WORK"
 [ "$BR_MODE" != all ] || [ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
@@ -106,6 +109,10 @@ exec $RUNNER bash -c '
   fi
   if [ "$BR_MODE" = bottom ]; then
     step "the bottom, derived through the replayed store and committed beside its references" python derive_bottom.py "$BR_WORK/real/real-store" $BR_PIXEL_ARGS
+    [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
+  fi
+  if [ "$BR_MODE" = levels ]; then
+    step "coarser levels, derived through the replayed store and committed beside its references" python derive_levels.py "$BR_WORK/real/real-store" $BR_PIXEL_ARGS
     [ $fail = 0 ] && echo "PASSED" || echo "FAILED: send the output back"; exit $fail
   fi
   if [ "$BR_MODE" = pixels ]; then

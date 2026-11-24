@@ -444,6 +444,35 @@ reader other than this script opening the derived arrays. At this rate
 the whole history (12,265 days) would be about 19 hours of one process
 and about 37 GB of derived chunks, a batch job and not a login node run.
 
+### Levels a source never had (2026-11-24)
+
+Model output in netCDF has one resolution, so a quick look at a time step
+costs the whole step. The store page in hypertidy/playproj showed where that
+bites: holding byte ranges made every repeated read free, and did nothing for
+the first read of each step of a time slider. What helps a first read is
+having less to read.
+
+`derive_levels.py` writes the levels the source lacks as a chain of derived
+arrays: `<array>_x2` is the mean of the 2 by 2 source cells that have a
+value, `<array>_x4` the same of `<array>_x2`, and so on until a level is
+small. Only the first link reads the source, once per step. Each level has
+its own y and x dimensions and coordinates (the means of the cells joined),
+keeps the source's type and packing, and records what it was made from, the
+rule and the factor. Nothing in the store's format changed to allow it: a
+level is rows whose bytes are in a pack.
+
+`levels_check.py` (in CI) derives three levels of the fixture's `temp`,
+the last from an odd width, and asserts each equals the same means computed
+cell by cell from the netCDF library's own read of the source files; that
+xarray sees each level as a variable on its own coordinates; that a second
+run writes nothing and a third adds the missing steps without changing the
+rows of the others.
+
+Not yet run on a real store. Not decided here: how a reader learns that
+`salt_x4` is a level of `salt` other than by its attributes (a multiscales
+convention is one answer), and which level a reader should pick, which is
+the reader's business and not the store's.
+
 ## What this does not show
 
 - **Object storage beyond Acacia.** The conditional PUT is shown on
