@@ -11,6 +11,10 @@ multidimensional API when GDAL can open the file, else by the HDF5 library
 through h5py. Where GDAL offers GetRawBlockInfo, the row's offset and
 size are compared with what GDAL reports as well.
 
+A --target that names no remap rule (say "none") leaves the paths as the
+table stores them: on the machine that holds the source files, that reads
+them in place.
+
 Chunks are taken from the first fragment, a middle one and the last, which
 an append commit wrote. Sources must be netCDF-4 or HDF5 files joined
 along dim_0 only. --base is prepended to a remapped path that is relative.
@@ -140,8 +144,13 @@ for f in pick:
     for i in rng.choice(len(t), size=min(len(t), -(-A.chunks // len(pick))), replace=False) if t else []:
         rows.append(t[int(i)])
 rows = rows[: A.chunks]
+import hashlib, json
+
+# what the version holds, apart from when and by whom it was committed: equal at two sites means the same rows
+content = hashlib.sha256(json.dumps([m["table_keys"], m["refs"], m.get("sources")], sort_keys=True).encode()).hexdigest()
 print(f"{name}: shape {a['shape']}, chunks {a['chunks']}, version {m['version']}, {len(frags)} fragments; "
       f"checking {len(rows)} chunks")
+print(f"version content {content[:16]}; paths read as {'stored' if not any(r['target'] == A.target for r in table.get('remap', [])) else 'remapped for ' + A.target}")
 bad, first = 0, {}
 for r in rows:
     key = tuple(r[f"dim_{i}"] for i in range(nd))

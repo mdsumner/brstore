@@ -34,6 +34,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE=${RCLONE_REMOTE:-pawsey1197}
 if { [ "${1:-all}" = all ] || [ "${1:-}" = zarr ]; } && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then  # these write to Acacia
+  command -v rclone > /dev/null || module load "${RCLONE_MODULE:-rclone/1.68.1}" 2> /dev/null || true
+  command -v rclone > /dev/null || { echo "run.sh: rclone not found (module load rclone, or export AWS_* yourself)" >&2; exit 1; }
   cfg=$(rclone config show "$REMOTE")
   get() { printf '%s\n' "$cfg" | awk -F' *= *' -v k="$1" '$1==k{print $2; exit}'; }
   AWS_ACCESS_KEY_ID=$(get access_key_id); AWS_SECRET_ACCESS_KEY=$(get secret_access_key)
@@ -51,7 +53,7 @@ export BR_MODE=${1:-all} BR_EXPORT=${2:-} BR_PIXEL_ARGS=
 if [ "$BR_MODE" = pixels ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
 export BR_PIXEL_ARGS
 mkdir -p "$BR_WORK"
-[ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
+[ "$BR_MODE" != all ] || [ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
 export TMPDIR=$BR_WORK/tmp; mkdir -p "$TMPDIR"
 case $BR_EXPORT in ""|http://*|https://*) ;; *) BR_EXPORT=$(cd "$BR_EXPORT" && pwd) ;; esac
 export BR_NATIVE=${BR_NATIVE:-} BR_PYTHON=${BR_PYTHON:-python3} PYSITE=
@@ -71,7 +73,10 @@ export PYSITE
 exec $RUNNER bash -c '
   set -uo pipefail
   if [ -n "$BR_NATIVE" ]; then
-    python() { "$BR_PYTHON" "$@"; }
+    # every step calls "python": make that name mean BR_PYTHON, also for steps started through env
+    real=$(command -v "$BR_PYTHON") || { echo "run.sh: no $BR_PYTHON on PATH (set BR_PYTHON)"; exit 1; }
+    mkdir -p "$TMPDIR/brbin" && printf "#!/bin/sh\nexec \"%s\" \"\$@\"\n" "$real" > "$TMPDIR/brbin/python"
+    chmod +x "$TMPDIR/brbin/python"; export PATH=$TMPDIR/brbin:$PATH; BR_PYTHON=python
     python -c "import sys; sys.exit(sys.version_info < (3, 9))" || {
       echo "run.sh: $BR_PYTHON is $(python --version 2>&1); Python 3.9 or later is needed (set BR_PYTHON)"; exit 1; }
     need="pyarrow duckdb numcodecs numpy h5py"; [ "$BR_MODE" = zarr ] && need="$need xarray zarr fsspec obstore"
