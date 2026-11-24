@@ -473,6 +473,48 @@ Not yet run on a real store. Not decided here: how a reader learns that
 convention is one answer), and which level a reader should pick, which is
 the reader's business and not the store's.
 
+### Materialize: each range once (2026-11-25)
+
+The question came from outside: someone using a virtual Icechunk store for
+light work wants the data local for heavier work, and an agent told to do it
+loops over the chunks wanted and fetches each, downloading the same source
+bytes again and again. Two modes were named there: materialize a whole
+repository at once, or materialize chunks as they are needed and keep them.
+
+Both are the hold of this record (section "a write is a harvest") applied
+to a selection, and planned from the rows instead of the chunks.
+`materialize.py` takes the rows of a selection that are not in a pack,
+reduces them to distinct `(path, offset, size)`, joins neighbours of one
+file into one request, fetches each request once, and commits a pack and the
+rewritten rows, one commit a batch. The plan is exact before any byte moves:
+rows, distinct ranges, requests, bytes named, bytes distinct, bytes to ask
+for. `Keeper` is the other mode: a chunk is fetched on first read and
+committed, so the next reader of the store finds it held.
+
+`materialize_check.py` (in CI) serves the fixture's netCDF files from a
+server that counts requests, and adds an array whose every time step names
+the ranges of one step, the many-chunks-one-range case. On that fixture the
+obvious way made 639 requests for 118,843 bytes; planned from rows it was 2
+requests for 84,895 bytes, of which 59,303 are distinct chunk bytes and the
+rest the gaps between neighbours joined. The server saw exactly the plan.
+Every chunk read back equals the source file's bytes. These are counts on a
+toy: they show the mechanism, not a speed.
+
+Limits, stated plainly:
+
+- **Whole chunks, as stored.** A selection picks the chunks it touches. A
+  subset inside a chunk, or another chunking, is a derivation; those also
+  read each source chunk once (`derive_levels.py` does).
+- **The source is not checked at fetch time.** A file rewritten since it
+  was scanned would be packed as it now is. The conditional request that
+  would refuse it (If-Match on the scanned ETag) is not sent yet.
+- **A Keeper knows a range is held by the rows that were read.** A key
+  that was never read, naming a range another key brought in, costs one
+  more request in a later session. The whole-selection mode has no such gap.
+- **It reads a brstore store.** A virtual Icechunk repository has to be
+  projected to rows first; nothing here reads Icechunk.
+- **Not run on a real store yet**, so there is no wall time to report.
+
 ## What this does not show
 
 - **Object storage beyond Acacia.** The conditional PUT is shown on

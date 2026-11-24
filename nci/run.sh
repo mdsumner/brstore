@@ -8,6 +8,9 @@
 #                                     # /g/data in place, commit it to the store
 #   bash nci/run.sh levels [args]     # after "real": derive the coarser levels
 #                                     # the source lacks, the same way
+#   bash nci/run.sh materialize [args] # after "real": copy the chunks of a
+#                                     # selection from /g/data into the store
+#                                     # and time it (args: materialize.py)
 #   bash nci/run.sh pixels [args]     # login or compute node, no network:
 #                                     # read chunks through that store with the
 #                                     # paths as stored (/g/data/...), so the
@@ -34,5 +37,5 @@ python -c "import duckdb" 2>/dev/null || {
   mkdir -p "$PYDIR" && python -m pip install -q --target "$PYDIR" --no-deps duckdb
 }
 mode=${1:-pixels}; [ $# -gt 0 ] && shift
-{ [ "$mode" = pixels ] || [ "$mode" = bottom ] || [ "$mode" = levels ]; } && set -- --target none "$@"
+{ [ "$mode" = pixels ] || [ "$mode" = bottom ] || [ "$mode" = levels ] || [ "$mode" = materialize ]; } && set -- --target none "$@"
 exec env BR_NATIVE=1 BR_PYTHON=python bash "$HERE/pawsey/run.sh" "$mode" "$@"
