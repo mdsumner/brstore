@@ -51,7 +51,7 @@ export BR_MODE=${1:-all} BR_EXPORT=${2:-} BR_PIXEL_ARGS=
 if [ "$BR_MODE" = pixels ]; then BR_PIXEL_ARGS="${*:2}"; BR_EXPORT=; fi
 export BR_PIXEL_ARGS
 mkdir -p "$BR_WORK"
-[ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
+[ "$BR_MODE" != all ] || [ -d "$BR_WORK/fixtures" ] || git clone -q --depth 1 https://github.com/wxylib/fixtures "$BR_WORK/fixtures"
 export TMPDIR=$BR_WORK/tmp; mkdir -p "$TMPDIR"
 case $BR_EXPORT in ""|http://*|https://*) ;; *) BR_EXPORT=$(cd "$BR_EXPORT" && pwd) ;; esac
 export BR_NATIVE=${BR_NATIVE:-} BR_PYTHON=${BR_PYTHON:-python3} PYSITE=
@@ -71,7 +71,7 @@ export PYSITE
 exec $RUNNER bash -c '
   set -uo pipefail
   if [ -n "$BR_NATIVE" ]; then
-    python() { "$BR_PYTHON" "$@"; }
+    python() { command "$BR_PYTHON" "$@"; }
     python -c "import sys; sys.exit(sys.version_info < (3, 9))" || {
       echo "run.sh: $BR_PYTHON is $(python --version 2>&1); Python 3.9 or later is needed (set BR_PYTHON)"; exit 1; }
     need="pyarrow duckdb numcodecs numpy h5py"; [ "$BR_MODE" = zarr ] && need="$need xarray zarr fsspec obstore"

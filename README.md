@@ -45,6 +45,8 @@ Nothing is ever overwritten.
 | `brzarr.py` | a zarr-python store over one version: `xarray.to_zarr` becomes one atomic commit |
 | `zarr_write_check.py` | xarray writes, appends and races through `brzarr.py`, in Zarr format 3 and 2; other readers read the result |
 | `pawsey/run.sh` | one command for Setonix: the object-storage probe on Acacia, the walk with the store on Acacia, a GDAL read |
+| `pawsey/pixels.py` | chunks read through a committed version, compared with the source files' own blocks |
+| `nci/run.sh` | the replay and the pixel check on NCI Gadi, reading `/g/data` sources in place |
 | `results/` | raw numbers behind the tables in the design record |
 
 ## Run
