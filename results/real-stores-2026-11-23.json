@@ -187,6 +187,40 @@
    ],
    "identical": 6,
    "byte_range_as_reader_reports": 6
+  },
+  "nci_gadi": {
+   "run": "bash nci/run.sh real <flat url>; bash nci/run.sh pixels, Gadi login node, by Michael, 2026-11-24 about 04:20 UTC",
+   "python": "3.12 (conda/analysis3 module), duckdb from pip --target",
+   "rows": 37530900,
+   "bulk_s": 28.49,
+   "bulk_fragments": 188,
+   "commits": 60,
+   "commit_s_median": 0.0813,
+   "commit_s_max": 0.1295,
+   "arrays_differing_from_export": 0,
+   "objects": {
+    "versions": 61,
+    "meta": 6,
+    "lists": 125,
+    "frags": 309
+   },
+   "history_mb": {
+    "versions": 0.03,
+    "meta": 0.0,
+    "lists": 0.27,
+    "frags": 298.19
+   },
+   "peak_memory_mb": 956,
+   "pixels": {
+    "version": 61,
+    "fragments": 248,
+    "version_content": "c72c471799f728d8",
+    "reader": "GDAL 3.10.2 on /g/data/gb6/ paths as stored",
+    "remap_target": "none",
+    "chunks": "the same six as the Setonix run, same offsets and sizes",
+    "identical": 6,
+    "byte_range_as_reader_reports": "not checked (GDAL 3.10 has no raw block info)"
+   }
   }
  }
 }
