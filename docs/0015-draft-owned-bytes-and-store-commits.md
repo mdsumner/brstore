@@ -513,7 +513,31 @@ Limits, stated plainly:
   more request in a later session. The whole-selection mode has no such gap.
 - **It reads a brstore store.** A virtual Icechunk repository has to be
   projected to rows first; nothing here reads Icechunk.
-- **Not run on a real store yet**, so there is no wall time to report.
+
+On a real store (Setonix login node, by Michael, 2026-11-24 about 22:35
+UTC): the last two days of Bluelink daily `salt`, sources read over https
+from NCI's THREDDS, four requests at a time.
+
+| | requests | MB asked for | seconds |
+|---|---|---|---|
+| one request a chunk row | 6,120 | 290.6 | 380.6 |
+| planned from the rows | 19 | 291.0 | 42.8 |
+
+The plan said 19 requests and 291.0 MB before anything was fetched, and that
+is what was made. No two rows of this selection name the same range, so
+nothing was saved by fetching a range once; all of the gain is neighbours
+joined, at a cost of 0.4 MB of gaps. The chunks sit almost back to back in
+one file and 19 is the 16 MB limit on a request. The pack is 290.4 MB, 0.2 MB
+less than the chunks, because equal chunks share one range of it. The commit
+is version 62 and its 6,120 rows now point at the pack.
+
+About nine times faster, with two cautions. It is one run, and the slow way
+went first, so the second pass may have gained from whatever the server kept
+from the first. And the ratio is a fact about this server and these chunks
+(about 47 KB each, so a request's fixed cost dominates): 6,120 requests at
+four at a time completed one every 62 ms, which is 0.76 MB a second, where
+the same bytes in 19 requests came at 6.8 MB a second. Larger chunks, or a store with a lower
+cost per request, would show less.
 
 ## What this does not show
 

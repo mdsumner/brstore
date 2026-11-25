@@ -6,6 +6,8 @@ on:
 jobs:
   walk:
     runs-on: ubuntu-latest
+    env:
+      PYTHONFAULTHANDLER: "1"  # on a crash, print where every thread was
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
